@@ -1,16 +1,13 @@
 # PRD Set
 
-This folder contains a compact PRD set for the Jubilant take-home.
+This folder contains the working product documents for `Chiron`.
 
-The split is intentional:
+Files:
 
-1. `PRD-001-open-domain-medical-evidence-assistant.md`
-   The product contract, user problem, scope, core workflow, and system requirements.
+1. `PRD.md`
+   The main product requirements document. It defines the problem, scope, product contract, MVP, user experience, and success criteria.
 
-2. `PRD-002-safety-abstention-and-evaluation.md`
-   The safety model, refusal taxonomy, evidence quality policy, and evaluation framework.
+2. `SAFETY_EVAL.md`
+   The safety and evaluation specification. It defines abstention behavior, evidence quality policy, benchmark design, and acceptance criteria.
 
-3. `PRD-003-mvp-demo-and-delivery.md`
-   The engineering wedge for the assignment: what to build, what not to build, and how to present it.
-
-These are written for an engineering review, not a full product organization handoff.
+This structure is optimized for architecture design, planning, and progress tracking rather than external presentation.
