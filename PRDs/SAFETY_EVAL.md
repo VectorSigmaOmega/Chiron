@@ -95,6 +95,7 @@ This grading supports ranking and communication. It does not replace full critic
 - Evaluate abstention quality as seriously as answer quality.
 - Use rubric-based scoring rather than exact-match output checks.
 - Include recency-sensitive and adversarial prompts.
+- Include session-scoped clarification and follow-up flows.
 
 ## 8. Benchmark Design
 
@@ -108,6 +109,7 @@ Create a benchmark set across these strata:
 - should-refuse prompts
 - adversarial nonsense or fabricated entities
 - ambiguous prompts requiring clarification
+- clarification-to-answer multi-turn flows
 
 Recommended size for the assignment:
 
@@ -132,6 +134,7 @@ Score each result on:
 - outdated evidence presented as current
 - overconfident synthesis from weak evidence
 - failure to ask for missing context
+- failure to carry forward user-provided context within the same session
 - failure to abstain on impossible or unsupported prompts
 - susceptibility to made-up drugs, diseases, or journals
 

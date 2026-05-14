@@ -55,7 +55,7 @@ The input space is open-ended. A doctor may ask any medical question. The output
 - Personalized patient-specific decision support beyond provided prompt context
 - Institution-specific protocol lookup unless sources are explicitly integrated
 - Alternative medicine
-- Continuous multi-turn case management
+- Persistent longitudinal case management across sessions
 
 ## 6. Product Principles
 
@@ -122,6 +122,15 @@ The system must preserve enough trace data to inspect:
 - extracted evidence
 - final response
 
+### FR11. Session-Scoped Context Handling
+The system must support short multi-turn interactions within a single conversation thread, including:
+
+- clarification questions
+- user-provided follow-up constraints
+- re-answering based on newly supplied context
+
+This does not require long-term cross-session memory or persistent case management in the MVP.
+
 ## 9. Response Contract
 
 ### Answered Response
@@ -179,15 +188,17 @@ Demonstrate that an open-domain medical question can be handled through dynamic 
 - polished production UX
 - account systems
 - exhaustive source coverage
-- complete multi-turn memory
+- persistent cross-session memory
 
 ## 12. Suggested MVP Source Set
 
 - PubMed
 - Europe PMC
+- PubMed Central open-access content where available
 - ClinicalTrials.gov
 - DailyMed
-- selected public guideline sources if practical
+- a public guideline layer such as WHO, NICE, CDC, NIH, or public specialty-society guidance
+- optional stretch source: openFDA or Drugs@FDA for additional drug-safety signals
 
 ## 13. Workflow
 
@@ -233,8 +244,11 @@ Demonstrate that an open-domain medical question can be handled through dynamic 
 - benchmark set
 - working MVP
 
-## 18. Open Questions
+## 18. Working Decisions For Architecture
 
-- How much patient-specific context should the first version support?
-- Which guideline sources should be prioritized after core literature/regulatory integrations?
-- Should evidence strength use a lightweight internal scale or a formal scheme?
+- The product will use a chat interface with conversation history, while the retrieval agent can remain stateless per invocation aside from receiving session context.
+- The MVP will support session-scoped multi-turn clarification and follow-up, but not persistent longitudinal memory across sessions.
+- The MVP may accept user-provided patient context as constraints, but it will remain an evidence assistant rather than a personalized clinical decision engine.
+- The MVP source set must include literature, open full text when available, trial registry data, drug-label data, and a public guideline layer.
+- The default scope is global evidence-based medicine; geography-specific weighting is a future extension.
+- The MVP will use a lightweight evidence-strength scale rather than a full formal grading framework.
