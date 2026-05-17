@@ -1,254 +1,295 @@
 # Frontend Agent Brief
 
-## Purpose
+This brief is only for frontend-to-backend integration.
 
-This document is for the agent responsible for scaffolding the `Chiron` frontend.
+## Goal
 
-The goal is not to implement the full product logic. The goal is to create a clean frontend foundation for a clinician-facing medical evidence assistant so that the UI can integrate with the backend later without major restructuring.
+Build the frontend against the current Chiron backend contract.
 
-## Product Context
+Do not invent backend routes.
+Do not add frontend-side medical logic.
+Do not assume every assistant response is a plain text answer.
 
-`Chiron` is an open-domain medical evidence assistant.
+## Backend Base URL
 
-A medical professional asks a question in natural language. The system should then do one of three things:
+Default local backend:
 
-- answer with grounded evidence and citations
-- ask a clarifying question
-- abstain when the evidence is insufficient, conflicting, outdated, or outside supported scope
+- `http://127.0.0.1:8000`
 
-The frontend should make those three outcomes obvious and easy to inspect.
+API prefix:
 
-## Frontend Objective
+- `/api`
 
-Scaffold a frontend application that is ready for:
+Recommended frontend env var:
 
-- session-based chat
-- evidence-first answer presentation
-- citation and source inspection
-- clarification loops
-- abstention states
+- `VITE_API_BASE_URL=http://127.0.0.1:8000/api`
 
-The frontend should feel serious, modern, and trustworthy, not like a generic chatbot demo.
+The backend already allows CORS from:
 
-## Recommended Stack
+- `http://localhost:5173`
+- `http://127.0.0.1:5173`
 
-If the repository does not already contain a frontend, scaffold with:
+## Required Endpoints
 
-- React
-- TypeScript
-- a separate `frontend/` app
-- a styling system that supports strong design direction and reusable tokens
+### `GET /api/health`
 
-The exact data-fetching library and routing solution do not need to be over-optimized at scaffolding time.
+Use for connectivity checks.
 
-## UX Principles
+Response shape:
 
-- The user experience should feel like a clinical research workspace, not a casual assistant.
-- Answers should foreground citations, dates, and limitations.
-- The assistant should not look overconfident when it is clarifying or abstaining.
-- The UI should support long, detailed answers without becoming visually noisy.
-- The default view should emphasize trust, traceability, and readability.
-
-## Screens To Scaffold
-
-### 1. Main Chat Workspace
-
-This is the primary screen.
-
-It should include:
-
-- conversation/session list or placeholder sidebar
-- active conversation pane
-- message composer
-- answer area that supports rich medical responses
-- evidence or citation panel, drawer, or expandable section
-
-This screen should be the central experience of the product.
-
-### 2. Empty State
-
-Before the first question is asked, the interface should show:
-
-- product identity
-- short explanation of what the system does
-- example clinician-style prompts
-
-This should guide the user toward realistic medical questions without overpromising.
-
-### 3. Clarification State
-
-When the backend asks for more context, the UI should display that as a meaningful workflow state, not as a failure.
-
-The user should be able to:
-
-- see what is missing
-- respond naturally
-- continue in the same conversation
-
-### 4. Abstention State
-
-When the system refuses to answer, the interface should show:
-
-- clear reason
-- what limitation caused the abstention
-- suggested next step if available
-
-This should feel intentional and trustworthy, not like an error page.
-
-### 5. Evidence Inspection Surface
-
-This can be a side panel, drawer, tabs, or inline expansion.
-
-It should support:
-
-- source title
-- source type
-- publication or update date
-- external link
-- evidence snippets or summary bullets
-
-This is a core part of the product, not optional metadata.
-
-### 6. Error / Retry State
-
-The UI should handle operational failures cleanly:
-
-- network failures
-- temporary backend errors
-- failed response loading
-
-The user should be able to retry without losing the conversation context.
-
-## Optional Screens
-
-These are useful if time permits, but not required for the first scaffold:
-
-- run-inspection or trace view for demos
-- benchmark/evaluation viewer
-- settings panel for model/source preferences
-
-## Core UI Regions
-
-The scaffold should anticipate these regions even if they are initially simple:
-
-- app shell
-- sidebar
-- main message timeline
-- composer/input area
-- evidence panel
-- response status indicator
-
-## Conversation States To Support
-
-The UI must be designed to represent at least these states:
-
-- idle
-- loading
-- answered
-- clarification needed
-- abstained
-- error
-
-These states should be visually distinct.
-
-## Message Types To Anticipate
-
-The frontend should be prepared to render:
-
-- user questions
-- assistant answers
-- assistant clarification prompts
-- assistant abstention responses
-- evidence summaries
-- citations and limitations
-
-The renderer should not assume every assistant message is a simple blob of text.
-
-## Design Direction
-
-The design should feel:
-
-- clinical but not sterile
-- intelligent but not flashy
-- trustworthy without looking bureaucratic
-- modern without looking like a generic AI app
-
-Avoid:
-
-- purple-on-white generic AI styling
-- toy chatbot aesthetics
-- excessive dashboard chrome
-- burying citations below the fold
-
-## Suggested Information Hierarchy
-
-For a successful answer, the user should immediately see:
-
-1. the answer
-2. how strong the evidence is
-3. where it came from
-4. what the limitations are
-
-For clarification:
-
-1. what is missing
-2. what the user should provide next
-
-For abstention:
-
-1. why the system is not answering
-2. what boundary or evidence gap caused it
-3. what the user can do next
-
-## Integration Expectations
-
-Do not hardcode backend routes in this brief.
-
-The frontend should simply be prepared for a backend that returns structured assistant states and evidence metadata. The frontend scaffold should keep API integration isolated behind a client layer so routes and payload details can be adjusted later without rewriting the UI.
-
-## Suggested Folder Shape
-
-The scaffold should roughly support:
-
-```text
-frontend/
-  src/
-    app/
-    components/
-    features/
-    lib/
-    styles/
+```json
+{
+  "status": "ok",
+  "service": "Chiron Backend",
+  "llm_mode": "heuristic"
+}
 ```
 
-Suggested feature areas:
+### `GET /api/sessions`
 
-- `chat`
-- `evidence`
-- `sessions`
-- `ui`
+Returns all sessions.
 
-## What The Scaffolding Agent Should Deliver
+Response shape:
 
-- a bootable frontend app in `frontend/`
-- a main chat workspace shell
-- placeholders for conversation history and evidence panel
-- reusable UI primitives for assistant states
-- mock or stub data support so the interface can be developed before backend completion
-- a structure that can absorb real backend integration later
+```json
+[
+  {
+    "id": "string",
+    "title": "string | null",
+    "created_at": "datetime",
+    "updated_at": "datetime"
+  }
+]
+```
 
-## What The Scaffolding Agent Should Not Do Yet
+### `POST /api/sessions`
 
-- implement final backend integration details
-- invent medical logic in the frontend
-- overbuild settings, auth, or dashboards
-- optimize for every edge case before the main chat experience exists
+Create a session.
 
-## Definition Of Done
+Request:
 
-The frontend scaffold is good enough when:
+```json
+{
+  "title": "string | null"
+}
+```
 
-- the app starts locally
-- the main workspace is present
-- empty, loading, answer, clarification, abstention, and error states all have UI shells
-- citations and evidence have a clear visual home
-- the structure is clean enough for another agent or engineer to continue implementation without reworking the app foundation
+Response shape is the same as `GET /api/sessions`.
+
+### `GET /api/sessions/{session_id}/messages`
+
+Returns all stored messages for a session.
+
+Response:
+
+```json
+[
+  {
+    "id": "string",
+    "session_id": "string",
+    "role": "user | assistant",
+    "content": "string",
+    "metadata_json": {},
+    "created_at": "datetime"
+  }
+]
+```
+
+Important:
+
+- user messages use `content`
+- assistant messages store the structured response in `metadata_json`
+- assistant `content` is only a readable text fallback, not the main source of truth
+
+### `POST /api/sessions/{session_id}/messages`
+
+Submit a user message and trigger a backend run.
+
+Request:
+
+```json
+{
+  "role": "user",
+  "content": "string"
+}
+```
+
+Response:
+
+```json
+{
+  "run_id": "string",
+  "response": {
+    "status": "answered | needs_clarification | abstained",
+    "answer": "string | null",
+    "clarification_question": "string | null",
+    "abstention_class": "string | null",
+    "abstention_reason": "string | null",
+    "evidence_summary": ["string"],
+    "evidence_strength": "high | moderate | low | unknown | null",
+    "limitations": ["string"],
+    "citations": [
+      {
+        "label": "string",
+        "source_id": "string",
+        "title": "string",
+        "url": "string",
+        "publication_date": "date | null",
+        "source_type": "string | null",
+        "publisher": "string | null",
+        "snippet": "string | null"
+      }
+    ],
+    "evidence_items": [
+      {
+        "evidence_id": "string",
+        "source_id": "string",
+        "source_type": "string",
+        "title": "string",
+        "url": "string",
+        "publication_date": "date | null",
+        "publisher": "string | null",
+        "population": "string | null",
+        "intervention": "string | null",
+        "outcome": "string | null",
+        "key_claim": "string",
+        "claim_type": "string | null",
+        "applicability": "string | null",
+        "supports_question_dimensions": ["string"],
+        "safety_notes": ["string"],
+        "limitations": ["string"],
+        "uncertainty_notes": ["string"],
+        "evidence_strength": "string",
+        "source_priority": 0,
+        "extracted_entities": ["string"]
+      }
+    ],
+    "last_literature_check_at": "datetime | null"
+  }
+}
+```
+
+### `GET /api/runs/{run_id}/steps`
+
+Optional, but useful for loading/progress/debug views.
+
+Response:
+
+```json
+[
+  {
+    "id": "string",
+    "run_id": "string",
+    "node_name": "string",
+    "step_order": 1,
+    "status": "completed",
+    "input_json": {},
+    "output_json": {},
+    "created_at": "datetime"
+  }
+]
+```
+
+## Assistant States
+
+The frontend must support exactly these response states:
+
+- `answered`
+- `needs_clarification`
+- `abstained`
+
+Expected behavior:
+
+- `answered`
+  - render `answer`
+  - render `citations`
+  - render `evidence_items`
+  - render `limitations`
+  - render `evidence_strength`
+
+- `needs_clarification`
+  - render `clarification_question`
+  - continue in the same session
+
+- `abstained`
+  - render `abstention_reason`
+  - render `abstention_class`
+  - optionally render `limitations`
+
+## Session Loading Behavior
+
+Use this flow:
+
+1. load sessions with `GET /api/sessions`
+2. when a session is selected, load messages with `GET /api/sessions/{session_id}/messages`
+3. when the user sends a message:
+   - append the user message locally
+   - call `POST /api/sessions/{session_id}/messages`
+   - append the returned assistant response
+
+If no session exists yet:
+
+1. create it with `POST /api/sessions`
+2. then submit the message
+
+## Message Mapping
+
+Map backend messages like this:
+
+- backend `role=user` -> user chat bubble from `content`
+- backend `role=assistant` -> assistant message from `metadata_json`
+
+For assistant history reload:
+
+- use `metadata_json.run_id` if present
+- otherwise fall back to the message id for local keys
+
+## Current Reality
+
+The backend is already live and tested.
+
+What exists now:
+
+- session APIs
+- message APIs
+- run-step API
+- CORS for Vite dev
+- structured evidence-rich assistant responses
+
+What the frontend does not need to solve:
+
+- orchestration
+- citation generation
+- evidence ranking
+- medical reasoning
+
+## Current Frontend Status
+
+There is already a frontend app in `frontend/`.
+
+It already contains:
+
+- a shell
+- session list
+- conversation pane
+- evidence panel
+- API client layer
+
+So this is not a greenfield brief.
+
+The frontend builder should:
+
+- treat the existing `frontend/` app as the base
+- keep the API integration isolated in the client layer
+- avoid breaking the current backend contract
+
+## Acceptance Check
+
+The frontend integration is correct when:
+
+1. the app can load sessions from the backend
+2. the app can load messages for a selected session
+3. the app can submit a user question to the backend
+4. the app can render all three assistant states
+5. the app can show citations and evidence items from the response payload
+6. the app can recover cleanly from backend/network errors

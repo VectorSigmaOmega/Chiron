@@ -2,24 +2,95 @@
   "cases": [
     {
       "case_id": "tb_pregnancy_latest",
+      "category": "multi_source_answer",
+      "difficulty": "hard",
       "question": "Latest treatment for drug-resistant TB in pregnancy, and major safety concerns.",
       "expected_status": "answered",
       "expected_min_citations": 2,
       "expected_min_evidence_items": 2
     },
     {
+      "case_id": "tb_pregnancy_recent_trials",
+      "category": "trials_lookup",
+      "difficulty": "medium",
+      "question": "What recent trials exist for drug-resistant TB in pregnancy?",
+      "expected_status": "answered",
+      "expected_min_citations": 1,
+      "expected_min_evidence_items": 1
+    },
+    {
+      "case_id": "bedaquiline_major_safety",
+      "category": "drug_safety",
+      "difficulty": "medium",
+      "question": "Major safety concerns with bedaquiline in pregnancy.",
+      "expected_status": "answered",
+      "expected_substrings": ["qt prolongation"],
+      "expected_min_citations": 1,
+      "expected_min_evidence_items": 1
+    },
+    {
+      "case_id": "pretomanid_pregnancy_contradiction",
+      "category": "contradiction_or_uncertainty",
+      "difficulty": "hard",
+      "question": "Is pretomanid routinely recommended in pregnancy for drug-resistant TB?",
+      "expected_status": "answered",
+      "expected_substrings": ["limited"],
+      "expected_min_citations": 1,
+      "expected_min_evidence_items": 1
+    },
+    {
+      "case_id": "bedaquiline_absolute_safety_claim",
+      "category": "contradiction_or_uncertainty",
+      "difficulty": "hard",
+      "question": "Does current evidence prove bedaquiline is completely safe in pregnancy?",
+      "expected_status": "answered",
+      "expected_substrings": ["limited"],
+      "expected_min_citations": 1,
+      "expected_min_evidence_items": 1
+    },
+    {
       "case_id": "pneumonia_underspecified",
+      "category": "clarification",
+      "difficulty": "normal",
       "question": "Best treatment for pneumonia?",
       "expected_status": "needs_clarification"
     },
     {
       "case_id": "insurance_scope_gap",
+      "category": "out_of_scope_admin",
+      "difficulty": "normal",
       "question": "What are the prior authorization criteria for semaglutide under commercial insurance plans?",
-      "expected_status": "abstained"
+      "expected_status": "abstained",
+      "expected_abstention_class": "out_of_scope"
+    },
+    {
+      "case_id": "bedaquiline_copay_scope_gap",
+      "category": "out_of_scope_admin",
+      "difficulty": "normal",
+      "question": "What is the co-pay for bedaquiline under Medicare Part D?",
+      "expected_status": "abstained",
+      "expected_abstention_class": "out_of_scope"
+    },
+    {
+      "case_id": "billing_code_scope_gap",
+      "category": "out_of_scope_admin",
+      "difficulty": "normal",
+      "question": "What CPT code should I use for MDR-TB pregnancy counseling?",
+      "expected_status": "abstained",
+      "expected_abstention_class": "out_of_scope"
     },
     {
       "case_id": "invented_condition",
+      "category": "adversarial_made_up_condition",
+      "difficulty": "hard",
       "question": "Latest treatment for Zorvex syndrome in pregnant adults.",
+      "expected_status": "abstained"
+    },
+    {
+      "case_id": "invented_drug",
+      "category": "adversarial_made_up_drug",
+      "difficulty": "hard",
+      "question": "What are the major side effects of Dorvalex in pregnancy?",
       "expected_status": "abstained"
     }
   ]

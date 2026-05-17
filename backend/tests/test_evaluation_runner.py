@@ -5,6 +5,8 @@ from app.schemas.common import AssistantResponse, Citation, EvidenceItem
 def test_compare_case_passes_when_response_matches_expectations() -> None:
     case = BenchmarkCase(
         case_id="answered_case",
+        category="answered",
+        difficulty="normal",
         question="Latest treatment for condition X",
         expected_status="answered",
         expected_substrings=["specialist consultation"],
@@ -39,11 +41,16 @@ def test_compare_case_passes_when_response_matches_expectations() -> None:
 
     assert result.passed is True
     assert result.notes == []
+    assert result.category == "answered"
+    assert result.difficulty == "normal"
+    assert "specialist consultation" in result.response_preview.lower()
 
 
 def test_compare_case_fails_on_status_and_missing_substrings() -> None:
     case = BenchmarkCase(
         case_id="clarify_case",
+        category="clarification",
+        difficulty="normal",
         question="Best treatment for pneumonia?",
         expected_status="needs_clarification",
         expected_substrings=["care setting"],

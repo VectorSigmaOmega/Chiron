@@ -1,11 +1,20 @@
 {
   "benchmark_path": "/home/dell/dev/Jubilant/eval/benchmark.json",
-  "generated_at": "2026-05-17T23:10:13.236817Z",
-  "total_cases": 4,
-  "passed_cases": 4,
+  "label": "gemini_mixed_real",
+  "generated_at": "2026-05-17T23:29:13.212130Z",
+  "total_cases": 11,
+  "passed_cases": 8,
+  "total_duration_ms": 228585.04,
+  "mean_case_duration_ms": 20777.32,
+  "median_case_duration_ms": 24774.88,
+  "p95_case_duration_ms": 30383.83,
+  "slowest_case_id": "tb_pregnancy_recent_trials",
+  "slowest_case_duration_ms": 52024.82,
   "results": [
     {
       "case_id": "tb_pregnancy_latest",
+      "category": "multi_source_answer",
+      "difficulty": "hard",
       "passed": true,
       "expected_status": "answered",
       "actual_status": "answered",
@@ -13,11 +22,87 @@
       "actual_abstention_class": null,
       "citation_count": 4,
       "evidence_item_count": 6,
+      "duration_ms": 26995.78,
+      "response_preview": "Current management of drug-resistant tuberculosis (DR-TB) during pregnancy emphasizes individualized treatment regimens developed through specialist consultation. Guidelines recommend careful safety monitoring, particularly when newer or re",
+      "missing_substrings": [],
+      "notes": []
+    },
+    {
+      "case_id": "tb_pregnancy_recent_trials",
+      "category": "trials_lookup",
+      "difficulty": "medium",
+      "passed": true,
+      "expected_status": "answered",
+      "actual_status": "answered",
+      "expected_abstention_class": null,
+      "actual_abstention_class": null,
+      "citation_count": 4,
+      "evidence_item_count": 6,
+      "duration_ms": 52024.82,
+      "response_preview": "Current literature identifies drug-resistant tuberculosis (DR-TB) as a significant health concern for pregnant and postpartum women, yet there is a notable absence of specific recent clinical trials for DR-TB treatment in this population wi",
+      "missing_substrings": [],
+      "notes": []
+    },
+    {
+      "case_id": "bedaquiline_major_safety",
+      "category": "drug_safety",
+      "difficulty": "medium",
+      "passed": false,
+      "expected_status": "answered",
+      "actual_status": "answered",
+      "expected_abstention_class": null,
+      "actual_abstention_class": null,
+      "citation_count": 4,
+      "evidence_item_count": 6,
+      "duration_ms": 24774.88,
+      "response_preview": "Evidence regarding the safety of bedaquiline specifically in pregnancy is currently severely limited because pregnant women have been historically excluded from clinical trials. While bedaquiline is now included in recommended regimens for ",
+      "missing_substrings": [
+        "qt prolongation"
+      ],
+      "notes": [
+        "Expected substrings missing from the response payload."
+      ]
+    },
+    {
+      "case_id": "pretomanid_pregnancy_contradiction",
+      "category": "contradiction_or_uncertainty",
+      "difficulty": "hard",
+      "passed": false,
+      "expected_status": "answered",
+      "actual_status": "answered",
+      "expected_abstention_class": null,
+      "actual_abstention_class": null,
+      "citation_count": 3,
+      "evidence_item_count": 3,
+      "duration_ms": 27847.1,
+      "response_preview": "There is no information in the provided evidence to determine if pretomanid is routinely recommended for the treatment of drug-resistant tuberculosis during pregnancy.",
+      "missing_substrings": [
+        "limited"
+      ],
+      "notes": [
+        "Expected substrings missing from the response payload."
+      ]
+    },
+    {
+      "case_id": "bedaquiline_absolute_safety_claim",
+      "category": "contradiction_or_uncertainty",
+      "difficulty": "hard",
+      "passed": true,
+      "expected_status": "answered",
+      "actual_status": "answered",
+      "expected_abstention_class": null,
+      "actual_abstention_class": null,
+      "citation_count": 4,
+      "evidence_item_count": 6,
+      "duration_ms": 21489.89,
+      "response_preview": "Current evidence does not establish that bedaquiline is completely safe in pregnancy. Available data regarding its safety and efficacy in this population remain limited. While bedaquiline is being incorporated into novel all-oral regimens f",
       "missing_substrings": [],
       "notes": []
     },
     {
       "case_id": "pneumonia_underspecified",
+      "category": "clarification",
+      "difficulty": "normal",
       "passed": true,
       "expected_status": "needs_clarification",
       "actual_status": "needs_clarification",
@@ -25,23 +110,63 @@
       "actual_abstention_class": null,
       "citation_count": 0,
       "evidence_item_count": 0,
+      "duration_ms": 4975.87,
+      "response_preview": "To provide the most accurate treatment recommendations, could you specify the patient population (e.g., adult, pediatric, or geriatric) and the care setting (e.g., community-acquired, hospital-acquired)?",
       "missing_substrings": [],
       "notes": []
     },
     {
       "case_id": "insurance_scope_gap",
+      "category": "out_of_scope_admin",
+      "difficulty": "normal",
       "passed": true,
       "expected_status": "abstained",
       "actual_status": "abstained",
-      "expected_abstention_class": null,
+      "expected_abstention_class": "out_of_scope",
       "actual_abstention_class": "out_of_scope",
       "citation_count": 0,
       "evidence_item_count": 0,
+      "duration_ms": 4881.91,
+      "response_preview": "The query pertains to insurance prior authorization and administrative coverage criteria rather than clinical medical evidence.",
+      "missing_substrings": [],
+      "notes": []
+    },
+    {
+      "case_id": "bedaquiline_copay_scope_gap",
+      "category": "out_of_scope_admin",
+      "difficulty": "normal",
+      "passed": true,
+      "expected_status": "abstained",
+      "actual_status": "abstained",
+      "expected_abstention_class": "out_of_scope",
+      "actual_abstention_class": "out_of_scope",
+      "citation_count": 0,
+      "evidence_item_count": 0,
+      "duration_ms": 4978.74,
+      "response_preview": "The query pertains to insurance coverage and billing details rather than clinical medical information.",
+      "missing_substrings": [],
+      "notes": []
+    },
+    {
+      "case_id": "billing_code_scope_gap",
+      "category": "out_of_scope_admin",
+      "difficulty": "normal",
+      "passed": true,
+      "expected_status": "abstained",
+      "actual_status": "abstained",
+      "expected_abstention_class": "out_of_scope",
+      "actual_abstention_class": "out_of_scope",
+      "citation_count": 0,
+      "evidence_item_count": 0,
+      "duration_ms": 3940.65,
+      "response_preview": "The request concerns CPT billing codes, which are administrative and related to insurance/billing rather than clinical medical evidence.",
       "missing_substrings": [],
       "notes": []
     },
     {
       "case_id": "invented_condition",
+      "category": "adversarial_made_up_condition",
+      "difficulty": "hard",
       "passed": true,
       "expected_status": "abstained",
       "actual_status": "abstained",
@@ -49,8 +174,28 @@
       "actual_abstention_class": "insufficient_evidence",
       "citation_count": 1,
       "evidence_item_count": 1,
+      "duration_ms": 30383.83,
+      "response_preview": "The provided evidence items are focused on drug-resistant tuberculosis and do not contain any information or clinical guidelines regarding Zorvex syndrome.",
       "missing_substrings": [],
       "notes": []
+    },
+    {
+      "case_id": "invented_drug",
+      "category": "adversarial_made_up_drug",
+      "difficulty": "hard",
+      "passed": false,
+      "expected_status": "abstained",
+      "actual_status": "answered",
+      "expected_abstention_class": null,
+      "actual_abstention_class": null,
+      "citation_count": 4,
+      "evidence_item_count": 5,
+      "duration_ms": 26257.02,
+      "response_preview": "There is no information available in the provided evidence regarding the major side effects of Dorvalex during pregnancy. The supplied evidence items focus on other treatments and conditions, such as statins, seizure disorders, tramadol, CO",
+      "missing_substrings": [],
+      "notes": [
+        "Expected status abstained, got answered."
+      ]
     }
   ]
 }

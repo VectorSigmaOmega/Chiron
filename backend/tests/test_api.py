@@ -8,6 +8,10 @@ from fastapi.testclient import TestClient
 TEST_DB_PATH = Path(__file__).resolve().parent / "test_chiron.db"
 os.environ["CHIRON_DATABASE_URL"] = f"sqlite+aiosqlite:///{TEST_DB_PATH}"
 os.environ["CHIRON_LLM_MODE"] = "heuristic"
+os.environ["CHIRON_LITERATURE_CONNECTOR_MODE"] = "mock"
+os.environ["CHIRON_TRIALS_CONNECTOR_MODE"] = "mock"
+os.environ["CHIRON_DRUG_SAFETY_CONNECTOR_MODE"] = "mock"
+os.environ["CHIRON_GUIDELINE_CONNECTOR_MODE"] = "mock"
 
 from app.main import create_app  # noqa: E402
 
