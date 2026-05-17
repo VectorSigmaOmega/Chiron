@@ -291,6 +291,95 @@ def should_replan(state: dict) -> str:
     return "synthesize_answer"
 
 
+def _question_mentions_any(parsed_query: ParsedQuery, needles: list[str]) -> bool:
+    return _contains_any(parsed_query.original_question.lower(), needles)
+
+
+def _has_direct_population_support(parsed_query: ParsedQuery, evidence_items: list[EvidenceItem]) -> bool:
+    if not parsed_query.pregnancy_status and not parsed_query.population:
+        return True
+    for item in evidence_items:
+        if item.applicability == "direct":
+            return True
+        haystack = " ".join([item.population or "", item.key_claim, item.title]).lower()
+        if parsed_query.pregnancy_status and "pregnan" in haystack:
+            return True
+        if parsed_query.population and parsed_query.population.lower() in haystack:
+            return True
+    return False
+
+
+def _has_safety_support(evidence_items: list[EvidenceItem]) -> bool:
+    return any(
+        item.claim_type == "safety"
+        or bool(item.safety_notes)
+        or "safety" in item.supports_question_dimensions
+        or item.source_type == "label"
+        for item in evidence_items
+    )
+
+
+def _has_recent_evidence(evidence_items: list[EvidenceItem]) -> bool:
+    recency_floor = datetime.now(UTC) - timedelta(days=365 * settings.recency_guardrail_years)
+    for item in evidence_items:
+        if item.publication_date and datetime.combine(item.publication_date, datetime.min.time(), tzinfo=UTC) >= recency_floor:
+            return True
+    return False
+
+
+def _apply_verification_guardrails(
+    parsed_query: ParsedQuery,
+    draft: AssistantResponse,
+    verification: VerificationResult,
+    evidence_items: list[EvidenceItem],
+) -> VerificationResult:
+    if draft.status != "answered":
+        return verification
+
+    unsupported = list(verification.unsupported_claims)
+    abstention_class = verification.abstention_class
+    abstention_reason = verification.abstention_reason
+
+    if not draft.citations:
+        unsupported.append("draft_answer_missing_citations")
+        abstention_class = abstention_class or "insufficient_evidence"
+        abstention_reason = abstention_reason or "The answer draft does not contain supporting citations."
+
+    if parsed_query.recency_required and not _has_recent_evidence(evidence_items):
+        unsupported.append("no_recent_evidence")
+        abstention_class = "recency_gap"
+        abstention_reason = "The available evidence does not include sufficiently recent sources for a recency-sensitive question."
+
+    if not _has_direct_population_support(parsed_query, evidence_items):
+        unsupported.append("population_mismatch")
+        abstention_class = abstention_class or "coverage_gap"
+        abstention_reason = abstention_reason or "The retrieved evidence does not directly address the requested patient population."
+
+    if _question_mentions_any(parsed_query, ["safety", "side effect", "adverse", "warning", "contraindication"]) and not _has_safety_support(evidence_items):
+        unsupported.append("missing_direct_safety_support")
+        abstention_class = abstention_class or "coverage_gap"
+        abstention_reason = abstention_reason or "The retrieved sources do not provide direct safety support for the requested question."
+
+    if all(item.evidence_strength == "low" for item in evidence_items) and len(evidence_items) < 2:
+        unsupported.append("weak_evidence_base")
+        abstention_class = abstention_class or "insufficient_evidence"
+        abstention_reason = abstention_reason or "The answer is based on a very limited low-strength evidence set."
+
+    if verification.status == "abstain" and unsupported and not abstention_class:
+        abstention_class = "insufficient_evidence"
+    if verification.status == "abstain" and unsupported and not abstention_reason:
+        abstention_reason = "The drafted answer included claims that could not be fully supported by the retrieved evidence."
+
+    return VerificationResult(
+        status="pass" if not unsupported else "abstain",
+        supported_claims=verification.supported_claims,
+        unsupported_claims=sorted(set(unsupported)),
+        conflicts=verification.conflicts,
+        abstention_class=abstention_class,
+        abstention_reason=abstention_reason,
+    )
+
+
 def synthesize_answer(state: dict) -> dict:
     evidence_items = [EvidenceItem.model_validate(item) for item in state.get("evidence_items", [])]
     parsed_query = ParsedQuery.model_validate(state["parsed_query"])
@@ -368,7 +457,13 @@ def synthesize_answer(state: dict) -> dict:
         status="answered",
         answer=" ".join(answer_lines),
         evidence_summary=evidence_summary,
-        evidence_strength="moderate",
+        evidence_strength=(
+            "high"
+            if any(item.evidence_strength == "high" for item in evidence_items)
+            else "moderate"
+            if any(item.evidence_strength == "moderate" for item in evidence_items)
+            else "low"
+        ),
         limitations=[
             "This deployable MVP currently mixes mock retrieval with real orchestration and should not be treated as production clinical decision support."
         ],
@@ -390,14 +485,16 @@ def synthesize_answer(state: dict) -> dict:
 
 def verify_answer(state: dict) -> dict:
     draft = AssistantResponse.model_validate(state["draft_response"])
+    parsed_query = ParsedQuery.model_validate(state["parsed_query"])
     evidence_items = [EvidenceItem.model_validate(item) for item in state.get("evidence_items", [])]
     llm_verification = llm_service.verify_answer(
-        parsed_query=ParsedQuery.model_validate(state["parsed_query"]),
+        parsed_query=parsed_query,
         draft_response=draft,
         evidence_items=evidence_items[:6],
     )
     if llm_verification is not None:
-        output = {"verification_result": llm_verification.model_dump(mode="json")}
+        guarded = _apply_verification_guardrails(parsed_query, draft, llm_verification, evidence_items)
+        output = {"verification_result": guarded.model_dump(mode="json")}
         return {
             **output,
             "step_trace": _trace(
@@ -439,6 +536,8 @@ def verify_answer(state: dict) -> dict:
             abstention_class="insufficient_evidence" if unsupported_claims else None,
             abstention_reason="Draft answer failed basic support checks." if unsupported_claims else None,
         )
+
+    verification = _apply_verification_guardrails(parsed_query, draft, verification, evidence_items)
 
     output = {"verification_result": verification.model_dump(mode="json")}
     return {

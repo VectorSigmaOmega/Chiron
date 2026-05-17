@@ -1,0 +1,56 @@
+{
+  "benchmark_path": "/home/dell/dev/Jubilant/eval/benchmark.json",
+  "generated_at": "2026-05-17T22:59:34.002525Z",
+  "total_cases": 4,
+  "passed_cases": 4,
+  "results": [
+    {
+      "case_id": "tb_pregnancy_latest",
+      "passed": true,
+      "expected_status": "answered",
+      "actual_status": "answered",
+      "expected_abstention_class": null,
+      "actual_abstention_class": null,
+      "citation_count": 4,
+      "evidence_item_count": 4,
+      "missing_substrings": [],
+      "notes": []
+    },
+    {
+      "case_id": "pneumonia_underspecified",
+      "passed": true,
+      "expected_status": "needs_clarification",
+      "actual_status": "needs_clarification",
+      "expected_abstention_class": null,
+      "actual_abstention_class": null,
+      "citation_count": 0,
+      "evidence_item_count": 0,
+      "missing_substrings": [],
+      "notes": []
+    },
+    {
+      "case_id": "insurance_scope_gap",
+      "passed": true,
+      "expected_status": "abstained",
+      "actual_status": "abstained",
+      "expected_abstention_class": null,
+      "actual_abstention_class": "insufficient_evidence",
+      "citation_count": 0,
+      "evidence_item_count": 0,
+      "missing_substrings": [],
+      "notes": []
+    },
+    {
+      "case_id": "invented_condition",
+      "passed": true,
+      "expected_status": "abstained",
+      "actual_status": "abstained",
+      "expected_abstention_class": null,
+      "actual_abstention_class": "insufficient_evidence",
+      "citation_count": 0,
+      "evidence_item_count": 0,
+      "missing_substrings": [],
+      "notes": []
+    }
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "cases": [
+    {
+      "case_id": "tb_pregnancy_latest",
+      "question": "Latest treatment for drug-resistant TB in pregnancy, and major safety concerns.",
+      "expected_status": "answered",
+      "expected_min_citations": 2,
+      "expected_min_evidence_items": 2
+    },
+    {
+      "case_id": "pneumonia_underspecified",
+      "question": "Best treatment for pneumonia?",
+      "expected_status": "needs_clarification",
+      "expected_substrings": ["patient population", "care setting"]
+    },
+    {
+      "case_id": "insurance_scope_gap",
+      "question": "What are the prior authorization criteria for semaglutide under commercial insurance plans?",
+      "expected_status": "abstained"
+    },
+    {
+      "case_id": "invented_condition",
+      "question": "Latest treatment for Zorvex syndrome in pregnant adults.",
+      "expected_status": "abstained"
+    }
+  ]
+}

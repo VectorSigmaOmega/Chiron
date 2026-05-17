@@ -50,9 +50,14 @@ class EvidenceItem(BaseModel):
     intervention: str | None = None
     outcome: str | None = None
     key_claim: str
+    claim_type: str | None = None
+    applicability: str | None = None
+    supports_question_dimensions: list[str] = Field(default_factory=list)
     safety_notes: list[str] = Field(default_factory=list)
     limitations: list[str] = Field(default_factory=list)
+    uncertainty_notes: list[str] = Field(default_factory=list)
     evidence_strength: str = "unknown"
+    source_priority: int = 0
     extracted_entities: list[str] = Field(default_factory=list)
 
 

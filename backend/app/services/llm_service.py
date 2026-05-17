@@ -102,6 +102,10 @@ Requirements:
 - Be explicit about uncertainty.
 - Keep the answer concise and clinician-facing.
 - Do not include citation labels inside the answer; citations are attached separately.
+- Prefer guideline-backed or review-backed conclusions over single studies when they conflict.
+- If evidence is indirect for the requested population, say so explicitly.
+- Do not mention a drug, regimen, warning, study result, or comparison unless it appears in the supplied evidence items.
+- If the evidence only supports a narrow answer, answer narrowly rather than generalizing.
 - evidence_strength must be one of: high, moderate, low, unknown
 
 Parsed query:
@@ -142,6 +146,7 @@ Use only these abstention classes when applicable:
 - ambiguous_query
 
 Check whether the draft answer is adequately supported by the evidence items and whether the question required more context.
+- Pay particular attention to population mismatch, recency-sensitive questions, and safety questions answered without direct safety evidence.
 
 Parsed query:
 {parsed_query.model_dump(mode="json")}

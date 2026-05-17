@@ -48,6 +48,7 @@ class Settings(BaseSettings):
     pubmed_tool: str = "chiron"
     pubmed_email: str | None = None
     pubmed_retmax: int = 5
+    pubmed_recency_years: int = 5
     clinicaltrials_base_url: str = "https://clinicaltrials.gov/api/v2"
     clinicaltrials_page_size: int = 3
     dailymed_base_url: str = "https://dailymed.nlm.nih.gov/dailymed/services/v2"
@@ -58,6 +59,7 @@ class Settings(BaseSettings):
     max_iterations: int = 3
     max_specialist_tasks: int = 8
     max_schema_retries: int = 2
+    recency_guardrail_years: int = 5
 
     model_config = SettingsConfigDict(
         env_prefix="CHIRON_",

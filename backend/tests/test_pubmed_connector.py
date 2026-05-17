@@ -14,6 +14,10 @@ def _mock_pubmed_transport(request: httpx.Request) -> httpx.Response:
     query = parse_qs(parsed.query)
     if parsed.path.endswith("/esearch.fcgi"):
         assert query["db"] == ["pubmed"]
+        term = query["term"][0].lower()
+        assert "pregnancy" in term
+        assert "treatment" in term
+        assert "drug-resistant tuberculosis" in term or "multidrug-resistant tuberculosis" in term
         return httpx.Response(
             200,
             json={
@@ -49,6 +53,41 @@ def _mock_pubmed_transport(request: httpx.Request) -> httpx.Response:
                 }
             },
         )
+    if parsed.path.endswith("/efetch.fcgi"):
+        return httpx.Response(
+            200,
+            text="""
+<PubmedArticleSet>
+  <PubmedArticle>
+    <MedlineCitation>
+      <PMID>40000001</PMID>
+      <Article>
+        <Abstract>
+          <AbstractText>Observational evidence suggests individualized treatment regimens remain necessary in pregnancy.</AbstractText>
+        </Abstract>
+      </Article>
+      <MeshHeadingList>
+        <MeshHeading><DescriptorName>Pregnancy</DescriptorName></MeshHeading>
+      </MeshHeadingList>
+    </MedlineCitation>
+  </PubmedArticle>
+  <PubmedArticle>
+    <MedlineCitation>
+      <PMID>40000002</PMID>
+      <Article>
+        <Abstract>
+          <AbstractText>Systematic review evidence summarizes pregnancy-specific safety data for multidrug-resistant tuberculosis therapy.</AbstractText>
+        </Abstract>
+      </Article>
+      <MeshHeadingList>
+        <MeshHeading><DescriptorName>Tuberculosis, Multidrug-Resistant</DescriptorName></MeshHeading>
+      </MeshHeadingList>
+    </MedlineCitation>
+  </PubmedArticle>
+</PubmedArticleSet>
+            """.strip(),
+            headers={"Content-Type": "application/xml"},
+        )
     raise AssertionError(f"Unexpected URL: {request.url}")
 
 
@@ -76,9 +115,9 @@ async def test_pubmed_connector_returns_normalized_documents() -> None:
 
     documents = await connector.search(parsed_query, task)
 
-    assert len(documents) == 2
-    assert documents[0].source_id == "40000001"
-    assert documents[0].source_type == "study"
-    assert documents[0].title == "Recent evidence for drug-resistant TB management"
-    assert documents[1].source_type == "review"
-    assert documents[1].publication_date is not None
+    assert len(documents) == 1
+    assert documents[0].source_id == "40000002"
+    assert documents[0].source_type == "review"
+    assert documents[0].abstract is not None
+    assert "pregnancy-specific safety data" in documents[0].abstract
+    assert documents[0].publication_date is not None

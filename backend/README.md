@@ -105,6 +105,22 @@ The suite covers:
 - DailyMed connector
 - guideline fixture connector
 
+## Benchmark Harness
+
+Run the small benchmark set in deterministic scaffold mode:
+
+```bash
+cd backend
+CHIRON_LLM_MODE=heuristic \
+CHIRON_LITERATURE_CONNECTOR_MODE=mock \
+CHIRON_TRIALS_CONNECTOR_MODE=mock \
+CHIRON_DRUG_SAFETY_CONNECTOR_MODE=mock \
+CHIRON_GUIDELINE_CONNECTOR_MODE=mock \
+uv run python -m app.evaluation.runner
+```
+
+This writes a JSON report to `eval/reports/latest.json`.
+
 ## Current Scope Limits
 
 - guideline retrieval is currently fixture-based rather than broad live scraping
