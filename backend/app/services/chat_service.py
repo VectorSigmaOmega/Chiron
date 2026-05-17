@@ -83,6 +83,10 @@ async def process_user_message(
     result = await graph.ainvoke(state)
 
     final_response = AssistantResponse.model_validate(result["final_response"])
+    stored_response = {
+        **final_response.model_dump(mode="json"),
+        "run_id": run.id,
+    }
     assistant_content = (
         final_response.answer
         or final_response.clarification_question
@@ -93,7 +97,7 @@ async def process_user_message(
         db,
         session_id,
         MessageCreateRequest(role="assistant", content=assistant_content),
-        metadata_json=final_response.model_dump(mode="json"),
+        metadata_json=stored_response,
     )
     await session_service.update_run(
         db,
@@ -101,7 +105,7 @@ async def process_user_message(
         status="completed",
         iteration_count=int(result.get("iteration", 0)),
         final_status=final_response.status,
-        final_response_json=final_response.model_dump(mode="json"),
+        final_response_json=stored_response,
     )
     await session_service.store_run_steps(db, run.id, result.get("step_trace", []))
     return run.id, final_response

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,6 +21,11 @@ async def get_session(session: AsyncSession, session_id: str) -> ChatSession | N
     return await session.get(ChatSession, session_id)
 
 
+async def list_sessions(session: AsyncSession) -> list[ChatSession]:
+    result = await session.execute(select(ChatSession).order_by(ChatSession.updated_at.desc()))
+    return list(result.scalars())
+
+
 async def list_messages(session: AsyncSession, session_id: str) -> list[ChatMessage]:
     result = await session.execute(
         select(ChatMessage).where(ChatMessage.session_id == session_id).order_by(ChatMessage.created_at.asc())
@@ -32,12 +39,18 @@ async def create_message(
     payload: MessageCreateRequest,
     metadata_json: dict | None = None,
 ) -> ChatMessage:
+    chat_session = await session.get(ChatSession, session_id)
     message = ChatMessage(
         session_id=session_id,
         role=payload.role,
         content=payload.content,
         metadata_json=metadata_json or {},
     )
+    if chat_session is not None:
+        chat_session.updated_at = datetime.now(UTC)
+        if not chat_session.title and payload.role == "user":
+            title = payload.content.strip().replace("\n", " ")
+            chat_session.title = title[:72] + ("…" if len(title) > 72 else "")
     session.add(message)
     await session.commit()
     await session.refresh(message)

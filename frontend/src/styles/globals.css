@@ -1,0 +1,244 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Surface — deep twilight ink, never pure black */
+    --ink: oklch(0.18 0.022 248);
+    --ink-deep: oklch(0.135 0.024 248);
+    --ink-rise: oklch(0.22 0.022 246);
+    --ink-glow: oklch(0.26 0.024 244);
+    --ink-line: oklch(0.32 0.02 246);
+    --ink-rule: oklch(0.28 0.018 246);
+
+    /* Bone — warm off-white text on the ink, never pure white */
+    --bone: oklch(0.94 0.014 72);
+    --bone-soft: oklch(0.82 0.014 70);
+    --bone-mute: oklch(0.62 0.013 68);
+    --bone-deep: oklch(0.48 0.013 66);
+
+    /* Ember — amber phosphor, the single luminous accent */
+    --ember: oklch(0.78 0.155 72);
+    --ember-bright: oklch(0.84 0.155 72);
+    --ember-deep: oklch(0.62 0.15 65);
+    --ember-glow: oklch(0.78 0.155 72 / 0.18);
+    --ember-mist: oklch(0.78 0.155 72 / 0.08);
+
+    /* State hues — desaturated, each distinct from ember */
+    --sage: oklch(0.7 0.085 158);
+    --sage-glow: oklch(0.7 0.085 158 / 0.15);
+    --rose: oklch(0.74 0.12 22);
+    --rose-glow: oklch(0.74 0.12 22 / 0.16);
+    --smoke: oklch(0.62 0.022 248);
+    --smoke-glow: oklch(0.62 0.022 248 / 0.14);
+
+    color-scheme: dark;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    background: var(--ink);
+    color: var(--bone);
+    font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+    font-feature-settings: "ss02", "cv11", "tnum";
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    overflow: hidden;
+  }
+
+  ::selection {
+    background: var(--ember-glow);
+    color: var(--bone);
+  }
+
+  *:focus-visible {
+    outline: 1px solid var(--ember);
+    outline-offset: 3px;
+    border-radius: 1px;
+  }
+
+  /* Scrollbars: barely there */
+  *::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  *::-webkit-scrollbar-thumb {
+    background: var(--ink-line);
+    border-radius: 999px;
+  }
+  *::-webkit-scrollbar-thumb:hover {
+    background: var(--bone-deep);
+  }
+
+  /* Slow amber radial drift in the background — candle light, smoothed */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: -20%;
+    pointer-events: none;
+    z-index: 0;
+    background:
+      radial-gradient(
+        ellipse 50% 60% at 18% 30%,
+        oklch(0.4 0.09 65 / 0.22),
+        transparent 70%
+      ),
+      radial-gradient(
+        ellipse 40% 50% at 88% 78%,
+        oklch(0.36 0.07 28 / 0.18),
+        transparent 70%
+      );
+    animation: drift 36s cubic-bezier(0.55, 0.05, 0.45, 0.95) infinite;
+    filter: blur(40px);
+  }
+
+  body::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 1;
+    background-image: radial-gradient(
+      oklch(0.95 0.02 70 / 0.025) 1px,
+      transparent 1px
+    );
+    background-size: 4px 4px;
+    mix-blend-mode: screen;
+  }
+
+  #root {
+    position: relative;
+    z-index: 2;
+  }
+
+  @keyframes drift {
+    0%,
+    100% {
+      transform: translate3d(0, 0, 0) scale(1);
+    }
+    50% {
+      transform: translate3d(40px, -30px, 0) scale(1.08);
+    }
+  }
+}
+
+@layer components {
+  /* Display serif — used for the wordmark and large moments */
+  .display-serif {
+    font-family: "Newsreader", "Source Serif Pro", Georgia, serif;
+    font-optical-sizing: auto;
+    font-variation-settings: "opsz" 36;
+    letter-spacing: -0.018em;
+  }
+
+  /* Reading serif — body answer prose */
+  .read-serif {
+    font-family: "Newsreader", "Source Serif Pro", Georgia, serif;
+    font-optical-sizing: auto;
+    font-variation-settings: "opsz" 16;
+    font-size: 1.0625rem;
+    line-height: 1.65;
+    letter-spacing: 0;
+  }
+
+  .read-serif p + p {
+    margin-top: 0.95em;
+  }
+
+  .read-serif strong {
+    font-weight: 600;
+    color: var(--bone);
+  }
+
+  .read-serif em {
+    font-style: italic;
+    color: var(--bone-soft);
+  }
+
+  /* Small mono label */
+  .ui-label {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 0.6875rem;
+    letter-spacing: 0.06em;
+    color: var(--bone-mute);
+    text-transform: uppercase;
+    font-weight: 400;
+  }
+
+  /* Inline citation: a phosphor flicker */
+  .cite {
+    position: relative;
+    display: inline-block;
+    min-width: 1.1rem;
+    padding: 0 0.2rem;
+    margin: 0 0.06rem;
+    border-bottom: 1px solid var(--ember);
+    color: var(--ember);
+    font-family: "JetBrains Mono", monospace;
+    font-size: 0.6875rem;
+    font-weight: 500;
+    line-height: 1;
+    text-align: center;
+    vertical-align: 0.3em;
+    cursor: pointer;
+    transition:
+      color 220ms cubic-bezier(0.22, 1, 0.36, 1),
+      text-shadow 220ms cubic-bezier(0.22, 1, 0.36, 1),
+      background-color 220ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .cite:hover,
+  .cite[data-active="true"] {
+    color: var(--ember-bright);
+    background: var(--ember-glow);
+    text-shadow: 0 0 12px oklch(0.78 0.155 72 / 0.6);
+  }
+
+  /* Quiet typographic divider */
+  .rule {
+    height: 1px;
+    background: var(--ink-rule);
+    width: 100%;
+  }
+
+  .rule-dotted {
+    background-image: linear-gradient(
+      to right,
+      var(--ink-line) 0,
+      var(--ink-line) 2px,
+      transparent 2px,
+      transparent 6px
+    );
+    background-size: 6px 1px;
+    background-repeat: repeat-x;
+    height: 1px;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+  .text-pretty {
+    text-wrap: pretty;
+  }
+
+  .glow-ember {
+    text-shadow: 0 0 24px oklch(0.78 0.155 72 / 0.4);
+  }
+
+  .ring-ember {
+    box-shadow:
+      0 0 0 1px oklch(0.78 0.155 72 / 0.3),
+      0 0 32px oklch(0.78 0.155 72 / 0.15);
+  }
+}

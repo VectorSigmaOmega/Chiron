@@ -10,6 +10,10 @@ class Settings(BaseSettings):
     environment: str = "development"
     debug: bool = False
     api_prefix: str = "/api"
+    cors_allowed_origins: list[str] = Field(
+        default_factory=lambda: ["http://localhost:5173", "http://127.0.0.1:5173"],
+        description="Allowed browser origins for the separate frontend dev server.",
+    )
     database_url: str = Field(
         default=f"sqlite+aiosqlite:///{(Path(__file__).resolve().parents[2] / 'chiron.db').as_posix()}",
         description="Async database URL. Defaults to local SQLite for zero-manual-setup bootstrapping.",
@@ -19,7 +23,10 @@ class Settings(BaseSettings):
         description="heuristic or gemini. Heuristic mode keeps the scaffold runnable without API keys.",
     )
     gemini_api_key: str | None = None
-    gemini_model: str = "gemini-2.5-pro"
+    gemini_model: str = "gemini-3-flash-preview"
+    gemini_query_model: str | None = None
+    gemini_synthesis_model: str | None = None
+    gemini_verifier_model: str | None = None
     literature_connector_mode: str = Field(
         default="mock",
         description="mock or pubmed. PubMed mode uses NCBI E-utilities for the literature specialist.",

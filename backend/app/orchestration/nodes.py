@@ -9,6 +9,7 @@ from app.core.config import get_settings
 from app.schemas.common import (
     AssistantResponse,
     Citation,
+    EvidenceItem,
     EntityRef,
     InformationNeed,
     ParsedQuery,
@@ -16,8 +17,10 @@ from app.schemas.common import (
     VerificationResult,
     VerifiedClaim,
 )
+from app.services.llm_service import get_llm_service
 
 settings = get_settings()
+llm_service = get_llm_service()
 
 
 def _trace(state: dict, node_name: str, input_payload: dict, output_payload: dict) -> list[dict]:
@@ -49,6 +52,19 @@ def load_session_context(state: dict) -> dict:
 
 def parse_query(state: dict) -> dict:
     question = state["user_question"].strip()
+    llm_result = llm_service.parse_query(question=question, session_context=state.get("session_context", {}))
+    if llm_result is not None:
+        output = {"parsed_query": llm_result.model_dump(mode="json")}
+        return {
+            **output,
+            "step_trace": _trace(
+                state,
+                "parse_query",
+                {"question": question, "mode": "gemini"},
+                output,
+            ),
+        }
+
     lowered = question.lower()
     entities: list[EntityRef] = []
     if "tuberculosis" in lowered or "tb" in lowered:
@@ -276,7 +292,7 @@ def should_replan(state: dict) -> str:
 
 
 def synthesize_answer(state: dict) -> dict:
-    evidence_items = state.get("evidence_items", [])
+    evidence_items = [EvidenceItem.model_validate(item) for item in state.get("evidence_items", [])]
     parsed_query = ParsedQuery.model_validate(state["parsed_query"])
     if not evidence_items:
         response = AssistantResponse(
@@ -300,15 +316,45 @@ def synthesize_answer(state: dict) -> dict:
         citations.append(
             Citation(
                 label=str(index),
-                source_id=item["source_id"],
-                title=item["title"],
-                url=item["url"],
-                publication_date=item.get("publication_date"),
+                source_id=item.source_id,
+                title=item.title,
+                url=item.url,
+                publication_date=item.publication_date,
+                source_type=item.source_type,
+                publisher=item.publisher,
+                snippet=item.key_claim,
             )
         )
-        evidence_summary.append(item["key_claim"])
-        if item["safety_notes"]:
-            safety_notes.extend(item["safety_notes"])
+        evidence_summary.append(item.key_claim)
+        if item.safety_notes:
+            safety_notes.extend(item.safety_notes)
+
+    llm_draft = llm_service.synthesize_answer(
+        parsed_query=parsed_query,
+        evidence_items=evidence_items[:6],
+        citations=citations,
+    )
+    if llm_draft is not None:
+        response = AssistantResponse(
+            status="answered",
+            answer=llm_draft.answer,
+            evidence_summary=llm_draft.evidence_summary,
+            evidence_strength=llm_draft.evidence_strength,
+            limitations=llm_draft.limitations,
+            citations=citations,
+            evidence_items=evidence_items[:6],
+            last_literature_check_at=datetime.now(UTC),
+        )
+        output = {"draft_response": response.model_dump(mode="json")}
+        return {
+            **output,
+            "step_trace": _trace(
+                state,
+                "synthesize_answer",
+                {"evidence_count": len(evidence_items), "mode": "gemini"},
+                {"citation_count": len(citations)},
+            ),
+        }
 
     if parsed_query.pregnancy_status:
         answer_lines.append(
@@ -327,6 +373,7 @@ def synthesize_answer(state: dict) -> dict:
             "This deployable MVP currently mixes mock retrieval with real orchestration and should not be treated as production clinical decision support."
         ],
         citations=citations,
+        evidence_items=evidence_items[:6],
         last_literature_check_at=datetime.now(UTC),
     )
     output = {"draft_response": response.model_dump(mode="json")}
@@ -343,7 +390,24 @@ def synthesize_answer(state: dict) -> dict:
 
 def verify_answer(state: dict) -> dict:
     draft = AssistantResponse.model_validate(state["draft_response"])
-    evidence_items = state.get("evidence_items", [])
+    evidence_items = [EvidenceItem.model_validate(item) for item in state.get("evidence_items", [])]
+    llm_verification = llm_service.verify_answer(
+        parsed_query=ParsedQuery.model_validate(state["parsed_query"]),
+        draft_response=draft,
+        evidence_items=evidence_items[:6],
+    )
+    if llm_verification is not None:
+        output = {"verification_result": llm_verification.model_dump(mode="json")}
+        return {
+            **output,
+            "step_trace": _trace(
+                state,
+                "verify_answer",
+                {"draft_status": draft.status, "mode": "gemini"},
+                output,
+            ),
+        }
+
     if draft.status != "answered":
         verification = VerificationResult(
             status="abstain" if draft.status == "abstained" else "clarify",
@@ -356,8 +420,8 @@ def verify_answer(state: dict) -> dict:
     else:
         supported = [
             VerifiedClaim(
-                claim_text=item["key_claim"],
-                supporting_source_ids=[item["source_id"]],
+                claim_text=item.key_claim,
+                supporting_source_ids=[item.source_id],
             )
             for item in evidence_items[:3]
         ]
@@ -407,6 +471,7 @@ def finalize_response(state: dict) -> dict:
                 evidence_summary=draft.evidence_summary,
                 limitations=draft.limitations,
                 citations=draft.citations,
+                evidence_items=draft.evidence_items,
                 last_literature_check_at=datetime.now(UTC),
             )
 

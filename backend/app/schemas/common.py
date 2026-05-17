@@ -11,6 +11,9 @@ class Citation(BaseModel):
     title: str
     url: str
     publication_date: date | None = None
+    source_type: str | None = None
+    publisher: str | None = None
+    snippet: str | None = None
 
 
 class EntityRef(BaseModel):
@@ -42,6 +45,7 @@ class EvidenceItem(BaseModel):
     title: str
     url: str
     publication_date: date | None = None
+    publisher: str | None = None
     population: str | None = None
     intervention: str | None = None
     outcome: str | None = None
@@ -101,4 +105,5 @@ class AssistantResponse(BaseModel):
     evidence_strength: str | None = None
     limitations: list[str] = Field(default_factory=list)
     citations: list[Citation] = Field(default_factory=list)
+    evidence_items: list[EvidenceItem] = Field(default_factory=list)
     last_literature_check_at: datetime | None = None

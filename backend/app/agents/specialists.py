@@ -17,6 +17,7 @@ def build_evidence_items(documents: list[SourceDocument]) -> list[EvidenceItem]:
                 title=document.title,
                 url=document.url,
                 publication_date=document.publication_date,
+                publisher=document.publisher,
                 population=document.metadata.get("population"),
                 intervention=", ".join(candidate_drugs) if candidate_drugs else document.metadata.get("drug"),
                 outcome=document.metadata.get("status"),

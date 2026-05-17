@@ -37,6 +37,12 @@ async def create_session(
     return SessionOut.model_validate(session, from_attributes=True)
 
 
+@router.get("/sessions", response_model=list[SessionOut])
+async def list_sessions(db: AsyncSession = Depends(get_db_session)) -> list[SessionOut]:
+    sessions = await session_service.list_sessions(db)
+    return [SessionOut.model_validate(session, from_attributes=True) for session in sessions]
+
+
 @router.get("/sessions/{session_id}", response_model=SessionOut)
 async def get_session(session_id: str, db: AsyncSession = Depends(get_db_session)) -> SessionOut:
     session = await session_service.get_session(db, session_id)

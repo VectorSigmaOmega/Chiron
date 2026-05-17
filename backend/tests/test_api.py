@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 
 TEST_DB_PATH = Path(__file__).resolve().parent / "test_chiron.db"
 os.environ["CHIRON_DATABASE_URL"] = f"sqlite+aiosqlite:///{TEST_DB_PATH}"
+os.environ["CHIRON_LLM_MODE"] = "heuristic"
 
 from app.main import create_app  # noqa: E402
 
