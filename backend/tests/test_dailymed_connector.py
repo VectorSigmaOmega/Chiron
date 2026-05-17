@@ -34,7 +34,12 @@ def _mock_dailymed_transport(request: httpx.Request) -> httpx.Response:
             <document xmlns="urn:hl7-org:v3">
               <title>SIRTURO</title>
               <section>
+                <title>Warnings and Precautions</title>
                 <text>Warning: QT prolongation and hepatotoxicity are important safety considerations.</text>
+              </section>
+              <section>
+                <title>Contraindications</title>
+                <text>Contraindications include known hypersensitivity.</text>
               </section>
             </document>
             """,
@@ -63,5 +68,7 @@ async def test_dailymed_connector_returns_label_document() -> None:
     documents = await connector.search(parsed_query, task)
     assert len(documents) == 1
     assert documents[0].source_type == "label"
-    assert "qt prolongation" in (documents[0].abstract or "")
+    assert "qt prolongation" in (documents[0].abstract or "").lower()
+    assert "Contraindications:" in (documents[0].abstract or "")
     assert documents[0].metadata["warnings"]
+    assert documents[0].metadata["contraindications_excerpt"] is not None

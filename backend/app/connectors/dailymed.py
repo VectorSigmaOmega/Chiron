@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import date
 from xml.etree import ElementTree
+import re
 
 import httpx
 
@@ -57,6 +58,60 @@ def _xml_text(root: ElementTree.Element) -> str:
     return " ".join(part.strip() for part in root.itertext() if part and part.strip())
 
 
+def _normalize_whitespace(text: str) -> str:
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def _extract_warning_signals(text: str) -> list[str]:
+    haystack = text.lower()
+    signal_map = [
+        ("qt prolongation", ["qt prolongation", "prolongation of the qt"]),
+        ("hepatotoxicity", ["hepatotoxicity", "hepatic adverse"]),
+        ("boxed warning", ["boxed warning"]),
+        ("contraindications", ["contraindication", "contraindications"]),
+        ("myelosuppression", ["myelosuppression"]),
+        ("peripheral neuropathy", ["peripheral neuropathy", "neuropathy"]),
+        ("embryo-fetal toxicity", ["embryo-fetal toxicity", "fetal toxicity", "pregnancy"]),
+        ("drug interactions", ["drug interactions", "interaction"]),
+    ]
+    extracted: list[str] = []
+    for label, needles in signal_map:
+        if any(needle in haystack for needle in needles):
+            extracted.append(label)
+    return extracted
+
+
+def _section_text(root: ElementTree.Element, keywords: list[str]) -> str | None:
+    keyword_set = {keyword.lower() for keyword in keywords}
+    for section in root.findall(".//{*}section"):
+        title = section.find(".//{*}title")
+        title_text = _normalize_whitespace("".join(title.itertext())) if title is not None else ""
+        if title_text.lower() in keyword_set:
+            return _normalize_whitespace(_xml_text(section))
+    return None
+
+
+def _build_label_summary(
+    *,
+    title: str,
+    warning_signals: list[str],
+    boxed_warning_text: str | None,
+    warnings_text: str | None,
+    contraindications_text: str | None,
+) -> str:
+    fragments = [title]
+    if warning_signals:
+        fragments.append(f"Key label signals: {', '.join(warning_signals)}.")
+    if boxed_warning_text:
+        fragments.append(boxed_warning_text[:260] + ("..." if len(boxed_warning_text) > 260 else ""))
+    elif warnings_text:
+        fragments.append(warnings_text[:260] + ("..." if len(warnings_text) > 260 else ""))
+    if contraindications_text:
+        cleaned = contraindications_text[:180] + ("..." if len(contraindications_text) > 180 else "")
+        fragments.append(f"Contraindications: {cleaned}")
+    return " ".join(fragment for fragment in fragments if fragment).strip()
+
+
 class DailyMedConnector(BaseConnector):
     connector_name = "dailymed"
 
@@ -101,24 +156,34 @@ class DailyMedConnector(BaseConnector):
                 xml_text = await self._fetch_label_xml(client, setid)
                 root = ElementTree.fromstring(xml_text)
                 flattened = _xml_text(root)
-                safety_notes = []
-                for signal in ["qt prolongation", "hepatotoxicity", "boxed warning", "contraindications"]:
-                    if signal in flattened.lower():
-                        safety_notes.append(signal)
+                safety_notes = _extract_warning_signals(flattened)
+                boxed_warning_text = _section_text(root, ["boxed warning"])
+                warnings_text = _section_text(root, ["warnings and precautions", "warnings"])
+                contraindications_text = _section_text(root, ["contraindications"])
+                title = record.get("title") or f"DailyMed label for {drug_name}"
                 documents.append(
                     SourceDocument(
                         source_id=setid,
                         source_type="label",
-                        title=record.get("title") or f"DailyMed label for {drug_name}",
+                        title=title,
                         url=f"https://dailymed.nlm.nih.gov/dailymed/drugInfo.cfm?setid={setid}",
                         publication_date=_parse_dailymed_date(record.get("published_date")),
                         publisher="DailyMed",
-                        abstract=" ".join(safety_notes) if safety_notes else None,
+                        abstract=_build_label_summary(
+                            title=title,
+                            warning_signals=safety_notes,
+                            boxed_warning_text=boxed_warning_text,
+                            warnings_text=warnings_text,
+                            contraindications_text=contraindications_text,
+                        ),
                         full_text=None,
                         metadata={
                             "drug": drug_name,
                             "spl_version": record.get("spl_version"),
                             "warnings": safety_notes,
+                            "boxed_warning_excerpt": boxed_warning_text,
+                            "warnings_excerpt": warnings_text,
+                            "contraindications_excerpt": contraindications_text,
                         },
                     )
                 )

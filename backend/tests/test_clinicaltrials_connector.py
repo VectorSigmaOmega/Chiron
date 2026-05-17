@@ -33,6 +33,11 @@ def _mock_trials_transport(request: httpx.Request) -> httpx.Response:
                             "briefSummary": "A study evaluating drug-resistant TB treatment options in pregnancy.",
                         },
                         "conditionsModule": {"conditions": ["Drug-Resistant Tuberculosis"]},
+                        "eligibilityModule": {
+                            "sex": "FEMALE",
+                            "stdAges": ["ADULT"],
+                            "eligibilityCriteria": "Inclusion Criteria: Pregnant adults with drug-resistant TB. Exclusion Criteria: Severe liver failure."
+                        },
                         "armsInterventionsModule": {
                             "interventions": [{"name": "Bedaquiline-containing regimen"}]
                         },
@@ -66,4 +71,8 @@ async def test_clinicaltrials_connector_returns_normalized_documents() -> None:
     assert len(documents) == 1
     assert documents[0].source_id == "NCT99999999"
     assert documents[0].source_type == "registry"
-    assert documents[0].metadata["overall_status"] == "RECRUITING"
+    assert documents[0].metadata["overall_status"] == "Recruiting"
+    assert documents[0].metadata["phase"] == ["Phase 3"]
+    assert documents[0].metadata["candidate_drugs"] == ["Bedaquiline-containing regimen"]
+    assert documents[0].metadata["population"] == "pregnant patients"
+    assert "Eligibility excerpt:" in (documents[0].abstract or "")

@@ -74,7 +74,9 @@ Return a ParsedQuery object that:
   - drug_safety
   - trials
 - uses concise clarification questions only when needed for safety
+- when clarification is needed for common syndromic questions like pneumonia, explicitly ask for patient population and care setting
 - marks recency_required true when the user asks for latest, current, recent, or similar wording
+- set scope_assessment to out_of_scope for insurance, billing, prior authorization, coverage, or non-medical administrative questions
 
 Session context:
 {session_context}

@@ -41,6 +41,35 @@ def _contains_any(text: str, needles: list[str]) -> bool:
     return any(needle in lowered for needle in needles)
 
 
+OUT_OF_SCOPE_NEEDLES = [
+    "billing",
+    "prior auth",
+    "prior authorization",
+    "insurance",
+    "coverage",
+    "copay",
+    "co-pay",
+    "reimbursement",
+    "claim denial",
+]
+
+
+def _extract_heuristic_entities(question: str) -> list[EntityRef]:
+    lowered = question.lower()
+    entities: list[EntityRef] = []
+    if "tuberculosis" in lowered or "tb" in lowered:
+        entities.append(EntityRef(name="drug-resistant tuberculosis", kind="condition"))
+    if "bedaquiline" in lowered:
+        entities.append(EntityRef(name="bedaquiline", kind="drug"))
+    if " syndrome" in lowered:
+        for token in question.replace("?", "").split(","):
+            fragment = token.strip()
+            if "syndrome" in fragment.lower():
+                entities.append(EntityRef(name=fragment.strip(), kind="condition"))
+                break
+    return entities
+
+
 def load_session_context(state: dict) -> dict:
     session_context = state.get("session_context", {})
     output = {"session_context": session_context}
@@ -52,6 +81,7 @@ def load_session_context(state: dict) -> dict:
 
 def parse_query(state: dict) -> dict:
     question = state["user_question"].strip()
+    lowered = question.lower()
     llm_result = llm_service.parse_query(question=question, session_context=state.get("session_context", {}))
     if llm_result is not None:
         output = {"parsed_query": llm_result.model_dump(mode="json")}
@@ -65,17 +95,13 @@ def parse_query(state: dict) -> dict:
             ),
         }
 
-    lowered = question.lower()
-    entities: list[EntityRef] = []
-    if "tuberculosis" in lowered or "tb" in lowered:
-        entities.append(EntityRef(name="drug-resistant tuberculosis", kind="condition"))
-    if "bedaquiline" in lowered:
-        entities.append(EntityRef(name="bedaquiline", kind="drug"))
+    entities = _extract_heuristic_entities(question)
 
     pregnancy_status = "pregnant" if "pregnan" in lowered else None
     recency_required = _contains_any(lowered, ["latest", "recent", "current"])
     needs_safety = _contains_any(lowered, ["safety", "side effect", "adverse", "contraindication"])
     needs_trials = _contains_any(lowered, ["trial", "experimental", "investigational"]) or recency_required
+    out_of_scope = _contains_any(lowered, OUT_OF_SCOPE_NEEDLES)
 
     missing_dimensions: list[str] = []
     clarification_question: str | None = None
@@ -117,6 +143,12 @@ def parse_query(state: dict) -> dict:
         needs_clarification=needs_clarification,
         clarification_question=clarification_question,
         information_needs=information_needs,
+        scope_assessment="out_of_scope" if out_of_scope else "in_scope",
+        scope_reason=(
+            "The question asks about administrative or payer policy rather than medical evidence."
+            if out_of_scope
+            else None
+        ),
     )
     output = {"parsed_query": parsed.model_dump(mode="json")}
     return {
@@ -128,6 +160,21 @@ def parse_query(state: dict) -> dict:
 def clarify_or_plan(state: dict) -> dict:
     parsed_query = ParsedQuery.model_validate(state["parsed_query"])
     tasks: list[SpecialistTask] = []
+    if parsed_query.scope_assessment == "out_of_scope":
+        response = AssistantResponse(
+            status="abstained",
+            abstention_class="out_of_scope",
+            abstention_reason=parsed_query.scope_reason
+            or "This question is outside the configured medical evidence scope.",
+            evidence_summary=[],
+            limitations=["Current scope is limited to clinical evidence, drug safety, and trial/source retrieval."],
+            last_literature_check_at=datetime.now(UTC),
+        )
+        output = {"final_response": response.model_dump(mode="json"), "pending_tasks": []}
+        return {
+            **output,
+            "step_trace": _trace(state, "clarify_or_plan", {"parsed_query": state["parsed_query"]}, output),
+        }
     if parsed_query.needs_clarification:
         response = AssistantResponse(
             status="needs_clarification",
@@ -309,6 +356,35 @@ def _has_direct_population_support(parsed_query: ParsedQuery, evidence_items: li
     return False
 
 
+def _has_condition_support(parsed_query: ParsedQuery, evidence_items: list[EvidenceItem]) -> bool:
+    condition_entities = [
+        entity.name.lower()
+        for entity in parsed_query.entities
+        if entity.kind.lower() in {"condition", "disease", "medical_concept"}
+    ]
+    if not condition_entities:
+        return True
+    evidence_text = " ".join(
+        " ".join(
+            [
+                item.title,
+                item.key_claim,
+                item.population or "",
+                item.intervention or "",
+            ]
+        )
+        for item in evidence_items
+    ).lower()
+    matched = 0
+    for entity in condition_entities:
+        aliases = {entity}
+        if "drug-resistant tuberculosis" in entity:
+            aliases.update({"tuberculosis", "tb", "rifampicin-resistant tuberculosis", "multidrug-resistant tuberculosis"})
+        if any(alias in evidence_text for alias in aliases):
+            matched += 1
+    return matched > 0
+
+
 def _has_safety_support(evidence_items: list[EvidenceItem]) -> bool:
     return any(
         item.claim_type == "safety"
@@ -354,6 +430,11 @@ def _apply_verification_guardrails(
         unsupported.append("population_mismatch")
         abstention_class = abstention_class or "coverage_gap"
         abstention_reason = abstention_reason or "The retrieved evidence does not directly address the requested patient population."
+
+    if not _has_condition_support(parsed_query, evidence_items):
+        unsupported.append("condition_mismatch")
+        abstention_class = abstention_class or "coverage_gap"
+        abstention_reason = abstention_reason or "The retrieved evidence does not directly address the requested clinical condition."
 
     if _question_mentions_any(parsed_query, ["safety", "side effect", "adverse", "warning", "contraindication"]) and not _has_safety_support(evidence_items):
         unsupported.append("missing_direct_safety_support")

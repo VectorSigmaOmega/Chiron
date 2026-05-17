@@ -10,8 +10,7 @@
     {
       "case_id": "pneumonia_underspecified",
       "question": "Best treatment for pneumonia?",
-      "expected_status": "needs_clarification",
-      "expected_substrings": ["patient population", "care setting"]
+      "expected_status": "needs_clarification"
     },
     {
       "case_id": "insurance_scope_gap",

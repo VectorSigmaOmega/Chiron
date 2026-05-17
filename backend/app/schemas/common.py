@@ -75,6 +75,8 @@ class ParsedQuery(BaseModel):
     needs_clarification: bool = False
     clarification_question: str | None = None
     information_needs: list[InformationNeed] = Field(default_factory=list)
+    scope_assessment: str = "in_scope"
+    scope_reason: str | None = None
 
 
 class SpecialistTask(BaseModel):
