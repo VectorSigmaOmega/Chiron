@@ -99,6 +99,8 @@ The MVP should be deployed as a modular monolith:
 
 This keeps correctness, traceability, and debugging simple while preserving the option to extract workers later.
 
+The MVP should become deployable before broad connector coverage is complete. A working backend scaffold with mock connectors and a compiled orchestration graph is a valid milestone, not an incomplete side task.
+
 ## 6. High-Level Runtime Architecture
 
 ```text
@@ -248,11 +250,9 @@ Role:
 
 Allowed connectors:
 
-- WHO
-- NICE
-- CDC
-- NIH
-- public specialty-society guideline sources
+- one explicitly allowlisted guideline source in the first pass
+- curated guideline fixtures for demo/evaluation if scraping or parsing is not yet stable
+- broader guideline coverage added later
 
 ### 8.3 Literature Agent
 
@@ -264,8 +264,8 @@ Role:
 Allowed connectors:
 
 - PubMed
-- Europe PMC
-- PubMed Central open-access full text where available
+- deferred later: Europe PMC
+- deferred later: PubMed Central open-access full text where available
 
 ### 8.4 Drug Safety Agent
 
@@ -276,8 +276,8 @@ Role:
 Allowed connectors:
 
 - DailyMed
-- optional: Drugs@FDA
-- optional: openFDA for secondary pharmacovigilance signals
+- optional if clearly needed later: Drugs@FDA
+- optional stretch: openFDA for secondary pharmacovigilance signals
 
 ### 8.5 Trials Agent
 
@@ -371,6 +371,17 @@ Run phases:
 10. synthesize
 11. verify
 12. persist response and run trace
+
+### 10.1.3 Scaffold-First Runtime Milestone
+
+Before broad real-source integration, the backend should support a fully deployable orchestration path using:
+
+- real session and run persistence
+- real LangGraph execution
+- real response contracts
+- mock specialist outputs through connector interfaces
+
+This allows the system to demonstrate clarification, orchestration, synthesis, verification, and abstention behavior before every connector is complete.
 
 ### 10.1.1 Graph Nodes
 
@@ -657,17 +668,27 @@ Each connector must:
 - map results into `SourceDocument`
 - expose deterministic errors
 - avoid leaking provider-specific shapes into the orchestrator
+- support fixture-backed or mock-backed development before live integration is complete
 
 Planned connectors:
 
 - PubMed
-- Europe PMC
-- PubMed Central open-access fetcher
 - ClinicalTrials.gov
-- DailyMed
-- guideline source adapters
+- DailyMed if integration proves straightforward in the first implementation pass
+- one narrow guideline connector or curated guideline fixture layer
+- deferred later: Europe PMC
+- deferred later: PubMed Central open-access fetcher
+- deferred later: broader guideline-source adapters
 
-Guideline retrieval should be allowlisted to public evidence-based sources. The MVP should not expose unrestricted web search.
+Connector priority for the MVP:
+
+1. mock connectors for all retrieval-specialist roles
+2. PubMed
+3. ClinicalTrials.gov
+4. DailyMed if low-friction
+5. one narrow guideline source or curated guideline fixture support
+
+Guideline retrieval should be allowlisted to public evidence-based sources. The MVP should not expose unrestricted web search, and Playwright should be treated as a selective exploration/fallback tool rather than the foundation of retrieval.
 
 ## 15. Structured Output Strategy
 
@@ -789,6 +810,7 @@ The MVP is intentionally simple in deployment, but the architecture must support
 - modular monolith
 - in-process LangGraph runtime
 - async connector fan-out
+- deployable backend scaffold before broad connector completion
 
 ### Stage 2: Throughput Scale
 

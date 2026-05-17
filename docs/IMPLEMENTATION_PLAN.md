@@ -18,10 +18,10 @@ The frontend is delegated separately. This plan focuses on backend-first deliver
 Build in vertical slices:
 
 1. lock contracts and scaffolding
-2. get one end-to-end query path working
-3. add more connectors and specialist depth
-4. add verification and evaluation
-5. harden observability and demo readiness
+2. get a deployable backend and orchestration path working with mock connectors
+3. add a small real-source set
+4. add more connectors and specialist depth incrementally
+5. harden verification, evaluation, and observability
 
 Do not start by building every connector or every agent in parallel.
 
@@ -50,6 +50,7 @@ Do not start by building every connector or every agent in parallel.
 - backend starts locally with one health endpoint
 - tests run locally and in CI
 - developers can start Postgres and Redis with a single documented command
+- a compiled LangGraph workflow can boot even before real connectors are complete
 
 ## 4. Phase 1: Core Schemas, Persistence, and Session APIs
 
@@ -75,32 +76,56 @@ Do not start by building every connector or every agent in parallel.
 - a run record can be created and linked to a message
 - schema validation rejects malformed payloads
 
-## 5. Phase 2: Source Connector Layer
+## 5. Phase 2: Deployable Orchestration Slice
 
 ### Tasks
 
 - implement connector interface and common error model
+- implement mock connectors for each retrieval specialist role
+- wire LangGraph nodes to use connector interfaces
+- implement one end-to-end run path with mock evidence
+- prove clarification, answer, and abstention paths through the real backend
+- add fixture-driven tests for orchestration state transitions
+
+### Deliverables
+
+- deployable backend scaffold
+- compiled LangGraph workflow
+- mock-backed end-to-end orchestration
+- stable response contract for frontend integration
+
+### Acceptance Criteria
+
+- the backend can run an end-to-end medical query flow without relying on unfinished live connectors
+- clarification, answer, and abstention all work through the same deployed backend
+- orchestration traces are persisted and inspectable
+- the system is demoable even before broad live-source coverage exists
+
+## 6. Phase 3: Initial Real Source Connectors
+
+### Tasks
+
 - build PubMed connector
-- build Europe PMC connector
-- build PMC open-access fetcher
 - build ClinicalTrials.gov connector
-- build DailyMed connector
-- build one guideline-source adapter abstraction
+- build DailyMed connector if it proves low-friction
+- build one narrow guideline-source adapter or curated guideline fixture path
 - add connector tests with recorded fixtures or deterministic mocks
 
 ### Deliverables
 
-- working connector modules
+- initial real connector set
 - normalized `SourceDocument` outputs
 - connector test suite
 
 ### Acceptance Criteria
 
-- each connector returns normalized source records
+- PubMed and ClinicalTrials.gov return normalized source records
+- DailyMed is included if it reaches working quality without destabilizing the schedule
+- guideline support exists through either one live narrow connector or curated fixtures
 - connector failures surface deterministic error codes
 - connector tests pass without live network dependence when replay fixtures are used
 
-## 6. Phase 3: Query Parsing and Specialist Task Planning
+## 7. Phase 4: Query Parsing and Specialist Task Planning
 
 ### Tasks
 
@@ -127,7 +152,7 @@ Do not start by building every connector or every agent in parallel.
 - the graph can compile and execute through parse and plan stages
 - invalid model output is retried and then surfaced safely if still invalid
 
-## 7. Phase 4: Specialist Agents and Orchestration Loop
+## 8. Phase 5: Specialist Agents and Orchestration Loop
 
 ### Tasks
 
@@ -155,7 +180,7 @@ Do not start by building every connector or every agent in parallel.
 - LangGraph state transitions are inspectable during test runs
 - loop termination works under both success and no-progress conditions
 
-## 8. Phase 5: Evidence Normalization, Synthesis, and Verification
+## 9. Phase 6: Evidence Normalization, Synthesis, and Verification
 
 ### Tasks
 
@@ -179,7 +204,7 @@ Do not start by building every connector or every agent in parallel.
 - abstention classes are emitted correctly
 - clarification, answer, and abstention all use the same response contract
 
-## 9. Phase 6: Chat API Completion and Frontend Contract Freeze
+## 10. Phase 7: Chat API Completion and Frontend Contract Freeze
 
 ### Tasks
 
@@ -201,7 +226,7 @@ Do not start by building every connector or every agent in parallel.
 - one message endpoint returns all required states through a stable schema
 - run inspection is sufficient for debugging demos
 
-## 10. Phase 7: Evaluation Harness
+## 11. Phase 8: Evaluation Harness
 
 ### Tasks
 
@@ -224,11 +249,13 @@ Do not start by building every connector or every agent in parallel.
 - results are stored and inspectable
 - evaluation report includes question, expected behavior, actual behavior, and evidence used
 
-## 11. Phase 8: Hardening and Demo Readiness
+## 12. Phase 9: Hardening and Incremental Source Expansion
 
 ### Tasks
 
 - add caching for connector responses
+- add Europe PMC if benchmark gaps justify it
+- add PMC open-access retrieval if full text materially improves benchmark performance
 - tighten timeout handling and retries
 - improve source-date handling for recency-sensitive queries
 - add seeded demo sessions
@@ -247,13 +274,15 @@ Do not start by building every connector or every agent in parallel.
 - common demo queries complete within acceptable latency
 - logs and traces are sufficient to explain system behavior live
 - seeded examples cover answer, clarification, and abstention flows
+- additional connectors are added only when they improve benchmark coverage or answer quality materially
 
-## 12. Test Plan
+## 13. Test Plan
 
 ### Unit Tests
 
 - schema validation
 - connector normalization
+- mock connector orchestration behavior
 - evidence-strength mapping
 - refusal classification
 - stop-condition logic
@@ -263,6 +292,7 @@ Do not start by building every connector or every agent in parallel.
 - end-to-end answer flow
 - clarification flow
 - abstention flow
+- mock-backed deployable orchestration flow
 - multi-pass orchestration flow
 - citation binding flow
 
@@ -273,7 +303,7 @@ Do not start by building every connector or every agent in parallel.
 - recency-sensitive prompts
 - clarification-follow-up sequences
 
-## 13. API and Contract Decisions
+## 14. API and Contract Decisions
 
 These decisions are locked for implementation:
 
@@ -283,10 +313,12 @@ These decisions are locked for implementation:
 - specialist agents are source-type based, not symptom/drug/journal buckets
 - tool access is restricted by capability gating, not OS-level sandboxing
 - LangGraph is the orchestration runtime; connectors, persistence, and verification remain normal application modules
+- the backend must become deployable before broad live-source coverage is complete
+- mock connectors are a first-class implementation step, not throwaway work
 - the final response status must always be one of `answered`, `needs_clarification`, or `abstained`
 - the verifier is the final gate before any assistant response is persisted
 
-## 14. Recommended Execution Order
+## 15. Recommended Execution Order
 
 If only one engineer is implementing backend first:
 
@@ -294,12 +326,12 @@ If only one engineer is implementing backend first:
 2. Phase 1
 3. Phase 2
 4. Phase 3
-5. Phase 4 with only guideline and literature agents first
-6. Phase 5
-7. add drug-safety and trials depth
-8. Phase 6
-9. Phase 7
-10. Phase 8
+5. Phase 4
+6. Phase 5 with literature and trials retrieval specialists first
+7. Phase 6
+8. Phase 7
+9. Phase 8
+10. Phase 9
 
 If multiple engineers are available:
 
@@ -308,19 +340,20 @@ If multiple engineers are available:
 - one owner for orchestration and agent logic
 - one owner for evaluation harness
 
-## 15. Definition of Done for MVP
+## 16. Definition of Done for MVP
 
 The MVP is done when all of the following are true:
 
 - a user can ask a medical question through the chat API
 - the system can clarify ambiguous prompts
-- the system can produce grounded answers from at least the core source set
+- the system can run end-to-end through a deployable backend scaffold even when some connectors are still mocked
+- the system can produce grounded answers from at least the initial real source set
 - the system abstains correctly when evidence is insufficient or outside scope
 - every answer includes citations and source dates
 - the evaluation harness can run a benchmark set and produce an inspectable report
 - the frontend team has a stable contract to integrate against
 
-## 16. Deferred Work
+## 17. Deferred Work
 
 Deliberately deferred until after MVP:
 
@@ -330,3 +363,4 @@ Deliberately deferred until after MVP:
 - unrestricted web search
 - provider-agnostic multi-LLM routing
 - advanced formal evidence grading frameworks
+- broad scraping-driven connector coverage

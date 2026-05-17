@@ -177,7 +177,9 @@ Demonstrate that an open-domain medical question can be handled through dynamic 
 ### MVP Must Include
 
 - one general medical evidence agent
-- a small set of trusted source integrations
+- a deployable backend scaffold with agent and connector interfaces
+- mock connectors for end-to-end orchestration before broad real-source work
+- a small set of trusted real source integrations
 - clarification handling
 - structured abstention
 - citation-grounded answers
@@ -193,12 +195,11 @@ Demonstrate that an open-domain medical question can be handled through dynamic 
 ## 12. Suggested MVP Source Set
 
 - PubMed
-- Europe PMC
-- PubMed Central open-access content where available
 - ClinicalTrials.gov
-- DailyMed
-- a public guideline layer such as WHO, NICE, CDC, NIH, or public specialty-society guidance
+- DailyMed if integration proves straightforward in the first pass
+- one narrow guideline source or curated guideline fixture layer for the demo
 - optional stretch source: openFDA or Drugs@FDA for additional drug-safety signals
+- deferred source expansions: Europe PMC, PMC open-access full text, broader guideline coverage
 
 ## 13. Workflow
 
@@ -249,6 +250,7 @@ Demonstrate that an open-domain medical question can be handled through dynamic 
 - The product will use a chat interface with conversation history, while the retrieval agent can remain stateless per invocation aside from receiving session context.
 - The MVP will support session-scoped multi-turn clarification and follow-up, but not persistent longitudinal memory across sessions.
 - The MVP may accept user-provided patient context as constraints, but it will remain an evidence assistant rather than a personalized clinical decision engine.
-- The MVP source set must include literature, open full text when available, trial registry data, drug-label data, and a public guideline layer.
+- The MVP should prove the orchestration contract with a deployable backend scaffold first, then add real connectors incrementally.
+- The initial real source priority is PubMed, ClinicalTrials.gov, and a narrow drug-safety/guideline layer rather than broad scraping coverage.
 - The default scope is global evidence-based medicine; geography-specific weighting is a future extension.
 - The MVP will use a lightweight evidence-strength scale rather than a full formal grading framework.

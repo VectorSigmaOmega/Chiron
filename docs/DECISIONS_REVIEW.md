@@ -22,10 +22,20 @@ The problems are not contradictions — they are **decisions that look fine in i
 
 A realistic MVP gets **one** working guideline connector (most likely CDC or a curated guideline JSON snapshot shipped in `eval/fixtures/`). Lock Q36 to "one public guideline source, allowlist expandable post-MVP" and pick the specific one now.
 
+Status: addressed in the updated decision sheet and implementation plan.
+
 ### 2. Six connectors is too many for the assignment window
 Q35 mandates PubMed + Europe PMC + PMC OA + ClinicalTrials.gov + DailyMed + guidelines. Phase 2 of the plan asks for all six before the orchestration loop exists.
 
 Recommend dropping the MVP-required set to **PubMed + ClinicalTrials.gov + DailyMed + 1 guideline source**, and treating Europe PMC / PMC OA as Phase-8 hardening. Europe PMC overlaps heavily with PubMed and adds full-text only in some cases — high cost, marginal MVP signal.
+
+Status: addressed in the updated decision sheet and implementation plan.
+
+### 2A. Scaffold-first execution order should be explicit
+
+The backend should become deployable with mock connectors and real orchestration before broad live connector coverage is complete.
+
+Status: addressed in the updated architecture and implementation plan.
 
 ### 3. India / ICMR alignment vs Q2's "global first"
 Project memory flags that Jubilant is Indian pharma and ICMR / Indian drug naming likely matter to evaluators. Q2 defers geography. These may be in tension — if the reviewer expects to see Indian-context awareness, "global-first" is the wrong default.

@@ -1,0 +1,15 @@
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+.DS_Store
+*.db
+*.sqlite3
+*.pyc
+.env
+.venv/
+backend/.venv/
+backend/.mypy_cache/
+frontend/node_modules/
+frontend/dist/
+*.tsbuildinfo
+*:Zone.Identifier

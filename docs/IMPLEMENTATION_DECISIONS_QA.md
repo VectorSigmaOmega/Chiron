@@ -355,30 +355,32 @@ It reduces early complexity while preserving the architectural path.
 ### Q35. What sources are mandatory in the MVP?
 
 **Recommended Answer**  
-The MVP source set must include:
+The initial real MVP source set should include:
 
 - PubMed
+- ClinicalTrials.gov
+- DailyMed if it proves low-friction during implementation
+- one narrow guideline source or curated guideline fixture support
+
+Later source expansion can add:
+
 - Europe PMC
 - PubMed Central open-access content where available
-- ClinicalTrials.gov
-- DailyMed
-- a public guideline layer
+- broader guideline coverage
 
 **Why**  
-This covers literature, open full text, trials, drug-label data, and guideline authority.
+This gives the MVP a believable real-source core without blocking the deployable backend on high-friction connector work.
 
 ### Q36. Which guideline sources should be allowlisted first?
 
 **Recommended Answer**  
-Start with:
+Do not promise broad guideline scraping in the first pass. Start with one of:
 
-- WHO
-- NICE
 - CDC
-- NIH
+- or one curated guideline fixture path if live parsing is not stable yet
 
 **Why**  
-These are public, high-trust, and broadly useful.
+This is much more buildable in assignment time than promising a multi-source guideline layer upfront.
 
 ### Q37. Should unrestricted web search be part of the MVP?
 
@@ -387,6 +389,14 @@ No.
 
 **Why**  
 The trust story is stronger if the source surface is explicitly allowlisted.
+
+### Q37A. Should Playwright be part of the retrieval foundation?
+
+**Recommended Answer**  
+No. Playwright should be treated as a selective exploration and fallback tool, not the foundation of the MVP retrieval layer.
+
+**Why**  
+Official APIs and structured endpoints are faster, more stable, and easier to test. Playwright is useful when investigating or narrowly scraping a difficult source, but not as the default connector model.
 
 ### Q38. Should `openFDA` be in the MVP?
 
@@ -434,6 +444,22 @@ No. Connectors should normalize into a shared `SourceDocument` contract.
 
 **Why**  
 This prevents the orchestrator from being polluted by source-specific shapes.
+
+### Q42A. Should the backend be deployable before all live connectors are complete?
+
+**Recommended Answer**  
+Yes.
+
+**Why**  
+The backend scaffold, orchestration, verification, and response contract are valuable and demoable before broad real-source integration is finished.
+
+### Q42B. Should mock connectors be part of the real implementation plan?
+
+**Recommended Answer**  
+Yes.
+
+**Why**  
+Mock connectors are a first-class step for proving orchestration behavior, testing graph transitions, and keeping the backend deployable while live integrations are added incrementally.
 
 ---
 
@@ -861,6 +887,21 @@ Use a hybrid of:
 **Why**  
 This gives realism without overdependence on live APIs.
 
+### Q75A. What is the initial connector implementation order?
+
+**Recommended Answer**  
+Use this order:
+
+1. mock connectors for all retrieval-specialist roles
+2. PubMed
+3. ClinicalTrials.gov
+4. DailyMed if low-friction
+5. one narrow guideline source or curated guideline fixtures
+6. Europe PMC / PMC open-access only if benchmark gaps justify them
+
+**Why**  
+This gives the fastest path to a deployable MVP with real evidence value.
+
 ### Q76. What are the core acceptance criteria for MVP trustworthiness?
 
 **Recommended Answer**  
@@ -978,6 +1019,7 @@ Defer:
 - provider-agnostic multi-LLM routing
 - persistent cross-session case memory
 - advanced formal evidence-grading frameworks
+- broad scraping-led source coverage
 
 **Why**  
 These are not required to prove the MVP thesis.

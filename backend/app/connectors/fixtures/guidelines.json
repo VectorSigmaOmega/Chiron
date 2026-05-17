@@ -1,0 +1,26 @@
+{
+  "guidelines": [
+    {
+      "source_id": "guideline_tb_pregnancy_fixture_001",
+      "title": "Curated fixture guidance for drug-resistant tuberculosis in pregnancy",
+      "url": "https://example.org/guidelines/drug-resistant-tuberculosis-pregnancy",
+      "publication_date": "2025-11-12",
+      "publisher": "Curated Demo Guidance",
+      "condition": "drug-resistant tuberculosis",
+      "population": "pregnancy",
+      "summary": "Pregnancy-specific management of drug-resistant tuberculosis should involve specialist consultation, individualized regimen review, and careful safety monitoring when newer agents are considered.",
+      "keywords": ["tuberculosis", "tb", "pregnan", "drug-resistant"]
+    },
+    {
+      "source_id": "guideline_pneumonia_fixture_001",
+      "title": "Curated fixture guidance for pneumonia triage questions",
+      "url": "https://example.org/guidelines/pneumonia-triage",
+      "publication_date": "2024-06-10",
+      "publisher": "Curated Demo Guidance",
+      "condition": "pneumonia",
+      "population": "general",
+      "summary": "Initial pneumonia management varies by age group, severity, and care setting, so clarification is usually needed before treatment selection.",
+      "keywords": ["pneumonia"]
+    }
+  ]
+}
