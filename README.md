@@ -1,9 +1,11 @@
 # Chiron
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![CI](https://github.com/VectorSigmaOmega/Chiron/actions/workflows/ci.yml/badge.svg)](https://github.com/VectorSigmaOmega/Chiron/actions/workflows/ci.yml)
-[![CD](https://github.com/VectorSigmaOmega/Chiron/actions/workflows/cd.yml/badge.svg)](https://github.com/VectorSigmaOmega/Chiron/actions/workflows/cd.yml)
-[![Live Demo](https://img.shields.io/badge/demo-live-0a7f5a)](https://chiron.abhinash.dev)
+[![App](https://img.shields.io/website?url=https%3A%2F%2Fchiron.abhinash.dev&label=app&logo=googlechrome&logoColor=white&up_message=live&down_message=down)](https://chiron.abhinash.dev)
+[![CI](https://img.shields.io/github/actions/workflow/status/VectorSigmaOmega/Chiron/ci.yml?branch=main&label=ci)](https://github.com/VectorSigmaOmega/Chiron/actions/workflows/ci.yml)
+[![Deploy](https://img.shields.io/github/actions/workflow/status/VectorSigmaOmega/Chiron/cd.yml?branch=main&label=deploy)](https://github.com/VectorSigmaOmega/Chiron/actions/workflows/cd.yml)
+[![Python](https://img.shields.io/badge/python-3.12-3776AB?logo=python&logoColor=white)](backend/)
+[![React](https://img.shields.io/badge/react-18-20232A?logo=react&logoColor=61DAFB)](frontend/)
+[![License](https://img.shields.io/badge/license-MIT-F7DF1E?logo=open-source-initiative&logoColor=black)](LICENSE)
 
 Chiron is an evidence-grounded medical research assistant designed for clinicians.
 It helps users ask open-ended medical questions and get back answers that are tied
