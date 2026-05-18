@@ -1,221 +1,245 @@
-import { useEffect, useRef } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import type {
-  AssistantMessage,
-  Citation,
-  EvidenceItem,
-  SourceType,
-} from "@/lib/types";
+/* ============================================================
+   EvidencePanel — the right-side drawer. Full structured
+   evidence behind an answer, examined on demand so the
+   conversation itself stays uncluttered.
+   ============================================================ */
 
-interface EvidencePanelProps {
-  message: AssistantMessage | null;
-  activeCitation: string | null;
-  open: boolean;
-  onClose: () => void;
-  onCitationActivate: (label: string | null) => void;
+import { useEffect, useRef, useState } from 'react'
+import type { AssistantResponse, EvidenceItem } from '../api/types'
+import { formatDate, formatStamp } from '../lib/format'
+import { CloseIcon, ExternalIcon } from './icons'
+import { Strength } from './Strength'
+
+interface PanelProps {
+  open: boolean
+  response: AssistantResponse | null
+  focusSourceId?: string | null
+  onClose: () => void
 }
 
 export function EvidencePanel({
-  message,
-  activeCitation,
   open,
+  response,
+  focusSourceId,
   onClose,
-  onCitationActivate,
-}: EvidencePanelProps) {
-  return (
-    <AnimatePresence>
-      {open && (
-        <motion.aside
-          key="evidence-panel"
-          initial={{ x: 60, opacity: 0 }}
-          animate={{ x: 0, opacity: 1 }}
-          exit={{ x: 60, opacity: 0 }}
-          transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
-          className="relative flex h-full w-[400px] shrink-0 flex-col bg-ink-deep"
-        >
-          <div className="absolute inset-y-0 left-0 w-px bg-ink-rule" />
+}: PanelProps) {
+  const bodyRef = useRef<HTMLDivElement>(null)
+  const [focused, setFocused] = useState<string | null>(null)
 
-          <div className="flex items-baseline justify-between px-7 pt-7 pb-6">
-            <div className="ui-label text-bone-mute">
-              evidence ·{" "}
-              <span className="text-bone-soft">
-                {message?.response.evidence_items.length ?? 0}
-              </span>
+  // Escape closes the drawer
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [open, onClose])
+
+  // scroll to + briefly highlight a focused source
+  useEffect(() => {
+    if (!open || !focusSourceId) {
+      setFocused(null)
+      return
+    }
+    setFocused(focusSourceId)
+    const esc =
+      typeof CSS !== 'undefined' && CSS.escape
+        ? CSS.escape(focusSourceId)
+        : focusSourceId
+    const scroll = window.setTimeout(() => {
+      bodyRef.current
+        ?.querySelector(`[data-src="${esc}"]`)
+        ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }, 130)
+    const clear = window.setTimeout(() => setFocused(null), 2600)
+    return () => {
+      window.clearTimeout(scroll)
+      window.clearTimeout(clear)
+    }
+  }, [open, focusSourceId])
+
+  const items = response?.evidence_items ?? []
+
+  return (
+    <>
+      <div
+        className={open ? 'scrim scrim--open' : 'scrim'}
+        onClick={onClose}
+        aria-hidden="true"
+      />
+      <aside
+        className={open ? 'drawer drawer--open' : 'drawer'}
+        aria-hidden={!open}
+        aria-label="Evidence"
+      >
+        <div className="drawer__head">
+          <div className="drawer__heading">
+            <div className="drawer__title">Evidence</div>
+            <div className="drawer__count">
+              {items.length} item{items.length === 1 ? '' : 's'} examined
             </div>
-            <button
-              onClick={onClose}
-              aria-label="Close evidence panel"
-              className="font-mono text-[14px] text-bone-mute transition-colors duration-200 hover:text-ember"
-            >
-              ×
-            </button>
           </div>
+          <button
+            type="button"
+            className="drawer__close"
+            onClick={onClose}
+            aria-label="Close evidence"
+          >
+            <CloseIcon width={15} height={15} />
+          </button>
+        </div>
 
-          <div className="flex-1 overflow-y-auto px-7 pb-10">
-            {message ? (
-              <EvidenceList
-                items={message.response.evidence_items}
-                citations={message.response.citations}
-                activeCitation={activeCitation}
-                onCitationActivate={onCitationActivate}
+        <div className="drawer__body" ref={bodyRef}>
+          {response?.last_literature_check_at && (
+            <div className="drawer__checked">
+              Literature checked{' '}
+              {formatStamp(response.last_literature_check_at)}
+            </div>
+          )}
+
+          {items.length === 0 ? (
+            <p className="sessions__empty">
+              No structured evidence accompanied this response.
+            </p>
+          ) : (
+            items.map((ev, i) => (
+              <EvidenceCard
+                key={ev.evidence_id || ev.source_id || i}
+                item={ev}
+                index={i + 1}
+                focused={!!focused && ev.source_id === focused}
               />
-            ) : (
-              <p className="font-serif text-[14px] italic leading-[1.5] text-bone-mute">
-                Pick a citation to inspect.
-              </p>
-            )}
-          </div>
-        </motion.aside>
-      )}
-    </AnimatePresence>
-  );
+            ))
+          )}
+        </div>
+      </aside>
+    </>
+  )
 }
 
-function EvidenceList({
-  items,
-  citations,
-  activeCitation,
-  onCitationActivate,
-}: {
-  items: EvidenceItem[];
-  citations: Citation[];
-  activeCitation: string | null;
-  onCitationActivate: (label: string | null) => void;
-}) {
-  if (items.length === 0) return null;
-  const labelMap = new Map(citations.map((c) => [c.source_id, c.label]));
-  return (
-    <ol className="space-y-7">
-      {items.map((item, idx) => {
-        const label = labelMap.get(item.source_id) ?? String(idx + 1);
-        return (
-          <EvidenceCard
-            key={item.evidence_id}
-            item={item}
-            label={label}
-            active={activeCitation === label}
-            onCitationActivate={onCitationActivate}
-            index={idx}
-          />
-        );
-      })}
-    </ol>
-  );
-}
-
-const sourceLabels: Record<SourceType, string> = {
-  guideline: "guideline",
-  review: "review",
-  trial: "trial",
-  label: "drug label",
-  registry: "registry",
-  study: "study",
-};
-
+/* ---------- one evidence item ---------- */
 function EvidenceCard({
   item,
-  label,
-  active,
-  onCitationActivate,
   index,
+  focused,
 }: {
-  item: EvidenceItem;
-  label: string;
-  active: boolean;
-  onCitationActivate: (label: string | null) => void;
-  index: number;
+  item: EvidenceItem
+  index: number
+  focused: boolean
 }) {
-  const ref = useRef<HTMLLIElement>(null);
-  useEffect(() => {
-    if (active && ref.current) {
-      ref.current.scrollIntoView({ behavior: "smooth", block: "nearest" });
-    }
-  }, [active]);
+  const pico: Array<[string, string]> = (
+    [
+      ['Population', item.population],
+      ['Intervention', item.intervention],
+      ['Outcome', item.outcome],
+    ] as Array<[string, string | null]>
+  ).filter((row): row is [string, string] => !!row[1]?.trim())
+
+  const srcMeta = [item.publisher, formatDate(item.publication_date)].filter(
+    Boolean,
+  )
 
   return (
-    <motion.li
-      ref={ref}
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{
-        delay: index * 0.08,
-        duration: 0.6,
-        ease: [0.22, 1, 0.36, 1],
-      }}
-      onMouseEnter={() => onCitationActivate(label)}
-      onMouseLeave={() => onCitationActivate(null)}
-      className="relative cursor-pointer"
+    <article
+      className={focused ? 'ev ev--focus' : 'ev'}
+      data-src={item.source_id}
     >
-      {active && (
-        <motion.span
-          layoutId="evidence-active"
-          className="absolute -inset-x-3 -inset-y-3 -z-10 rounded-sm bg-ember-mist"
-          transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-        />
-      )}
-
-      <div className="flex items-baseline gap-3">
-        <span
-          className={`font-mono text-[11px] tabular-nums transition-colors duration-300 ${
-            active ? "text-ember" : "text-bone-deep"
-          }`}
-        >
-          {label.padStart(2, "0")}
-        </span>
-        <span className="ui-label">{sourceLabels[item.source_type]}</span>
+      <div className="ev__top">
+        <span className="ev__label">E{index}</span>
+        <span className="ev__type">{item.source_type || 'source'}</span>
       </div>
 
-      <h3
-        className={`mt-1.5 font-serif text-[15px] leading-[1.35] text-pretty transition-colors duration-300 ${
-          active ? "text-bone" : "text-bone-soft"
-        }`}
-        style={{ fontVariationSettings: '"opsz" 15' }}
-      >
-        {item.title}
-      </h3>
-
-      <div className="mt-1 font-mono text-[10.5px] tabular-nums text-bone-deep">
-        {item.publisher}
-        {item.publisher && item.publication_date && " · "}
-        {item.publication_date && formatDate(item.publication_date)}
+      <div className="ev__claim">
+        {item.key_claim?.trim() || 'No claim summary was provided.'}
       </div>
-
-      <p
-        className="mt-3 font-serif text-[13.5px] italic leading-[1.55] text-bone-mute text-pretty"
-        style={{ fontVariationSettings: '"opsz" 14' }}
-      >
-        {item.key_claim}
-      </p>
-
-      {item.safety_notes.length > 0 && (
-        <p
-          className="mt-2.5 font-serif text-[12.5px] leading-[1.55] text-bone-deep text-pretty"
-          style={{ fontVariationSettings: '"opsz" 13' }}
-        >
-          <span className="ui-label mr-1.5 tracking-wide text-bone-deep">safety,</span>
-          {item.safety_notes.join(" ")}
-        </p>
+      {item.claim_type && (
+        <div className="ev__claimtype">{item.claim_type}</div>
       )}
 
       <a
-        href={item.url}
+        className="ev__src"
+        href={item.url || undefined}
         target="_blank"
-        rel="noopener noreferrer"
-        className="mt-3 inline-flex items-baseline gap-1.5 font-mono text-[10.5px] tracking-wide text-bone-mute transition-colors duration-200 hover:text-ember"
+        rel="noreferrer noopener"
       >
-        <span>open source</span>
-        <span>↗</span>
+        <span className="ev__srctitle">
+          {item.title || 'Untitled source'}
+          <ExternalIcon
+            width={12}
+            height={12}
+            style={{ flexShrink: 0, marginTop: 2 }}
+          />
+        </span>
+        {srcMeta.length > 0 && (
+          <span className="ev__srcmeta">{srcMeta.join('  ·  ')}</span>
+        )}
       </a>
-    </motion.li>
-  );
+
+      {pico.length > 0 && (
+        <div className="pico">
+          {pico.map(([k, v]) => (
+            <div className="pico__row" key={k}>
+              <span className="pico__k">{k}</span>
+              <span className="pico__v">{v}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {item.applicability?.trim() && (
+        <EvBlock head="Applicability" items={[item.applicability]} />
+      )}
+      {item.safety_notes.length > 0 && (
+        <EvBlock head="Safety" items={item.safety_notes} variant="safety" />
+      )}
+      {item.limitations.length > 0 && (
+        <EvBlock head="Limitations" items={item.limitations} />
+      )}
+      {item.uncertainty_notes.length > 0 && (
+        <EvBlock head="Uncertainty" items={item.uncertainty_notes} />
+      )}
+      {item.supports_question_dimensions.length > 0 && (
+        <EvBlock
+          head="Addresses"
+          items={[item.supports_question_dimensions.join('  ·  ')]}
+        />
+      )}
+
+      {item.extracted_entities.length > 0 && (
+        <div className="tags">
+          {item.extracted_entities.map((t, i) => (
+            <span className="tag" key={i}>
+              {t}
+            </span>
+          ))}
+        </div>
+      )}
+
+      <div className="drawer__strength">
+        <Strength value={item.evidence_strength} />
+      </div>
+    </article>
+  )
 }
 
-function formatDate(iso: string): string {
-  return new Date(iso)
-    .toLocaleDateString(undefined, {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    })
-    .toLowerCase();
+function EvBlock({
+  head,
+  items,
+  variant,
+}: {
+  head: string
+  items: string[]
+  variant?: 'safety'
+}) {
+  return (
+    <div className={variant === 'safety' ? 'evblock evblock--safety' : 'evblock'}>
+      <div className="evblock__h">{head}</div>
+      <ul className="evblock__list">
+        {items.map((t, i) => (
+          <li key={i}>{t}</li>
+        ))}
+      </ul>
+    </div>
+  )
 }

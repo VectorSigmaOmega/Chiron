@@ -1,16 +1,11 @@
-import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react";
-import path from "node:path";
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
 
+// Dev server runs on 5173 so it matches the backend's allowed CORS origins.
 export default defineConfig({
   plugins: [react()],
-  resolve: {
-    alias: {
-      "@": path.resolve(__dirname, "./src"),
-    },
-  },
   server: {
     port: 5173,
-    host: true,
+    strictPort: true,
   },
-});
+})

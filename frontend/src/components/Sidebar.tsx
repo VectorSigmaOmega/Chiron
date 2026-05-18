@@ -1,118 +1,113 @@
-import { motion } from "framer-motion";
-import { Wordmark } from "./Mark";
-import type { ChatSession } from "@/lib/types";
+/* ============================================================
+   Sidebar — identity, new-consultation action, session list,
+   and the backend health footer.
+   ============================================================ */
+
+import type { Health } from '../api/types'
+import type { HealthState } from '../hooks/useChiron'
+import type { Session } from '../api/types'
+import { formatRelative } from '../lib/format'
+import { ChironMark, PlusIcon } from './icons'
 
 interface SidebarProps {
-  sessions: ChatSession[];
-  activeSessionId: string | null;
-  onSelectSession: (id: string) => void;
-  onNewSession: () => void;
-}
-
-function formatRelative(iso: string): string {
-  const then = new Date(iso).getTime();
-  const now = Date.now();
-  const minutes = Math.floor((now - then) / 60_000);
-  if (minutes < 1) return "now";
-  if (minutes < 60) return `${minutes}m`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h`;
-  const days = Math.floor(hours / 24);
-  if (days < 7) return `${days}d`;
-  return new Date(iso).toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-  });
+  sessions: Session[]
+  activeId: string | null
+  loadingSessions: boolean
+  healthState: HealthState
+  health: Health | null
+  onSelect: (id: string) => void
+  onNew: () => void
 }
 
 export function Sidebar({
   sessions,
-  activeSessionId,
-  onSelectSession,
-  onNewSession,
+  activeId,
+  loadingSessions,
+  healthState,
+  health,
+  onSelect,
+  onNew,
 }: SidebarProps) {
   return (
-    <aside className="relative flex h-full w-[240px] shrink-0 flex-col bg-ink-deep">
-      <div className="absolute inset-y-0 right-0 w-px bg-ink-rule" />
-
-      <div className="px-6 pt-7 pb-8">
-        <Wordmark size="md" />
+    <aside className="rail">
+      <div className="rail__head">
+        <div className="brand">
+          <ChironMark className="brand__mark" />
+          <span className="brand__name">Chiron</span>
+        </div>
+        <p className="brand__tag">
+          Grounded answers from cited evidence — or a clear, honest
+          abstention.
+        </p>
       </div>
 
-      <button
-        onClick={onNewSession}
-        className="group mx-6 mb-8 flex items-center gap-2 text-left font-mono text-[11.5px] tracking-wide text-bone-soft transition-colors duration-200 hover:text-ember"
-      >
-        <span className="text-ember opacity-70 group-hover:opacity-100 transition-opacity">
-          +
-        </span>
-        <span>new consult</span>
-        <span className="ml-auto text-[10px] text-bone-deep">⌘N</span>
+      <button className="rail__new" onClick={onNew} type="button">
+        <PlusIcon width={15} height={15} />
+        New consultation
       </button>
 
-      <nav className="flex-1 overflow-y-auto px-2 pb-8">
-        {sessions.map((session, i) => (
-          <SessionItem
-            key={session.id}
-            session={session}
-            active={session.id === activeSessionId}
-            onSelect={onSelectSession}
-            delay={i * 0.04}
-          />
-        ))}
+      <div className="rail__label">Consultations</div>
+
+      <nav className="sessions" aria-label="Past consultations">
+        {loadingSessions && sessions.length === 0 ? (
+          <p className="sessions__empty">Loading…</p>
+        ) : sessions.length === 0 ? (
+          <p className="sessions__empty">No consultations yet.</p>
+        ) : (
+          sessions.map((s) => (
+            <button
+              key={s.id}
+              type="button"
+              className={
+                s.id === activeId ? 'session session--active' : 'session'
+              }
+              onClick={() => onSelect(s.id)}
+              aria-current={s.id === activeId ? 'true' : undefined}
+            >
+              <span className="session__title">
+                {s.title?.trim() || 'Untitled consultation'}
+              </span>
+              <span className="session__meta">
+                {formatRelative(s.updated_at || s.created_at)}
+              </span>
+            </button>
+          ))
+        )}
       </nav>
+
+      <HealthIndicator state={healthState} health={health} />
     </aside>
-  );
+  )
 }
 
-function SessionItem({
-  session,
-  active,
-  onSelect,
-  delay,
+function HealthIndicator({
+  state,
+  health,
 }: {
-  session: ChatSession;
-  active: boolean;
-  onSelect: (id: string) => void;
-  delay: number;
+  state: HealthState
+  health: Health | null
 }) {
+  const label =
+    state === 'checking'
+      ? 'Checking backend…'
+      : state === 'ok'
+        ? 'Backend online'
+        : 'Backend offline'
+
+  const dotClass =
+    state === 'ok'
+      ? 'health__dot--ok'
+      : state === 'down'
+        ? 'health__dot--down'
+        : ''
+
   return (
-    <motion.button
-      onClick={() => onSelect(session.id)}
-      initial={{ opacity: 0, x: -6 }}
-      animate={{ opacity: 1, x: 0 }}
-      transition={{
-        delay,
-        duration: 0.5,
-        ease: [0.22, 1, 0.36, 1],
-      }}
-      className="group relative block w-full px-4 py-2 text-left"
-    >
-      {active && (
-        <motion.span
-          layoutId="active-session"
-          className="absolute left-0 top-1/2 h-[14px] w-[2px] -translate-y-1/2 bg-ember"
-          transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-          style={{
-            boxShadow: "0 0 8px oklch(0.78 0.155 72 / 0.8)",
-          }}
-        />
+    <div className="health">
+      <span className={`health__dot ${dotClass}`} />
+      <span>{label}</span>
+      {state === 'ok' && health?.llm_mode && (
+        <span className="health__mode">{health.llm_mode}</span>
       )}
-      <div className="flex items-baseline justify-between gap-2">
-        <span
-          className={`truncate font-serif text-[14px] leading-tight transition-colors duration-200 ${
-            active
-              ? "text-bone"
-              : "text-bone-soft group-hover:text-bone"
-          }`}
-          style={{ fontVariationSettings: '"opsz" 14' }}
-        >
-          {session.title}
-        </span>
-        <span className="shrink-0 font-mono text-[10px] tabular-nums text-bone-deep">
-          {formatRelative(session.created_at)}
-        </span>
-      </div>
-    </motion.button>
-  );
+    </div>
+  )
 }

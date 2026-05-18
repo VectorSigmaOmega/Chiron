@@ -1,118 +1,77 @@
-import { useEffect, useRef, useState } from "react";
-import { motion } from "framer-motion";
+/* ============================================================
+   Composer — the question input. Auto-growing, keyboard-first.
+   ============================================================ */
+
+import { useEffect, useRef } from 'react'
+import { SendIcon, SpinnerIcon } from './icons'
 
 interface ComposerProps {
-  onSubmit: (content: string) => void;
-  disabled?: boolean;
-  placeholder?: string;
-  autoFocus?: boolean;
+  value: string
+  onChange: (v: string) => void
+  onSubmit: () => void
+  sending: boolean
 }
 
 export function Composer({
+  value,
+  onChange,
   onSubmit,
-  disabled,
-  placeholder = "ask",
-  autoFocus,
+  sending,
 }: ComposerProps) {
-  const [value, setValue] = useState("");
-  const [focused, setFocused] = useState(false);
-  const taRef = useRef<HTMLTextAreaElement>(null);
+  const ref = useRef<HTMLTextAreaElement>(null)
 
+  // grow the textarea with its content, up to a ceiling
   useEffect(() => {
-    const ta = taRef.current;
-    if (!ta) return;
-    ta.style.height = "auto";
-    ta.style.height = Math.min(ta.scrollHeight, 220) + "px";
-  }, [value]);
+    const el = ref.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = `${Math.min(el.scrollHeight, 168)}px`
+  }, [value])
 
-  useEffect(() => {
-    if (autoFocus) taRef.current?.focus();
-  }, [autoFocus]);
+  const canSend = value.trim().length > 0 && !sending
 
   function submit() {
-    const trimmed = value.trim();
-    if (!trimmed || disabled) return;
-    onSubmit(trimmed);
-    setValue("");
+    if (canSend) onSubmit()
   }
-
-  function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      submit();
-    }
-  }
-
-  const ready = value.trim().length > 0 && !disabled;
 
   return (
-    <form
-      onSubmit={(e) => {
-        e.preventDefault();
-        submit();
-      }}
-      className="relative w-full"
-    >
-      <div className="relative flex items-end gap-3 py-3">
-        <span
-          aria-hidden
-          className="select-none font-serif text-[24px] italic leading-none text-ember"
-          style={{ fontVariationSettings: '"opsz" 24' }}
-        >
-          ‹
-        </span>
-        <textarea
-          ref={taRef}
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          onKeyDown={onKeyDown}
-          onFocus={() => setFocused(true)}
-          onBlur={() => setFocused(false)}
-          rows={1}
-          placeholder={placeholder}
-          disabled={disabled}
-          className="w-full resize-none bg-transparent font-serif text-[18px] leading-[1.55] text-bone placeholder:text-bone-deep focus:outline-none disabled:opacity-50"
-          style={{ fontVariationSettings: '"opsz" 18' }}
-        />
-        <button
-          type="submit"
-          disabled={!ready}
-          aria-label="Send"
-          className="shrink-0 self-end pb-1.5 font-mono text-[11px] tracking-wide transition-all duration-300"
-        >
-          <motion.span
-            animate={{
-              opacity: ready ? 1 : 0.35,
-              x: ready ? 0 : -4,
+    <div className="composer">
+      <div className="composer__inner">
+        <div className="composer__field">
+          <textarea
+            ref={ref}
+            rows={1}
+            value={value}
+            placeholder="Ask a clinical question…"
+            onChange={(e) => onChange(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault()
+                submit()
+              }
             }}
-            transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
-            className={`flex items-center gap-1.5 ${
-              ready ? "text-ember" : "text-bone-deep"
-            }`}
+          />
+          <button
+            type="button"
+            className="send"
+            disabled={!canSend}
+            onClick={submit}
+            aria-label="Send question"
           >
-            <span>send</span>
-            <span>→</span>
-          </motion.span>
-        </button>
+            {sending ? (
+              <SpinnerIcon className="spin" width={17} height={17} />
+            ) : (
+              <SendIcon width={17} height={17} />
+            )}
+          </button>
+        </div>
+        <div className="composer__hint">
+          <span>Chiron answers only from cited evidence.</span>
+          <span>
+            <kbd>↵</kbd> send&nbsp;&nbsp;<kbd>⇧ ↵</kbd> new line
+          </span>
+        </div>
       </div>
-
-      {/* Animated underline */}
-      <div className="relative h-px w-full bg-ink-rule">
-        <motion.div
-          className="absolute inset-y-0 left-1/2 origin-center bg-ember"
-          initial={false}
-          animate={{
-            width: focused || value ? "100%" : "0%",
-            x: focused || value ? "-50%" : "0%",
-          }}
-          transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-          style={{
-            boxShadow: focused
-              ? "0 0 12px oklch(0.78 0.155 72 / 0.5)"
-              : "none",
-          }}
-        />
-      </div>
-    </form>
-  );
+    </div>
+  )
 }
