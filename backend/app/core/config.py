@@ -60,6 +60,8 @@ class Settings(BaseSettings):
     max_specialist_tasks: int = 8
     max_schema_retries: int = 2
     recency_guardrail_years: int = 5
+    anonymous_client_cookie_name: str = "chiron_client_id"
+    anonymous_client_cookie_max_age_seconds: int = 60 * 60 * 24 * 365
 
     model_config = SettingsConfigDict(
         env_prefix="CHIRON_",

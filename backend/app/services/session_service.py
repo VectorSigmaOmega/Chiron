@@ -9,26 +9,34 @@ from app.persistence.models import ChatMessage, ChatSession, Run, RunStep
 from app.schemas.session import MessageCreateRequest
 
 
-async def create_session(session: AsyncSession, title: str | None = None) -> ChatSession:
-    chat_session = ChatSession(title=title)
+async def create_session(session: AsyncSession, owner_id: str, title: str | None = None) -> ChatSession:
+    chat_session = ChatSession(owner_id=owner_id, title=title)
     session.add(chat_session)
     await session.commit()
     await session.refresh(chat_session)
     return chat_session
 
 
-async def get_session(session: AsyncSession, session_id: str) -> ChatSession | None:
-    return await session.get(ChatSession, session_id)
+async def get_session(session: AsyncSession, session_id: str, owner_id: str) -> ChatSession | None:
+    result = await session.execute(
+        select(ChatSession).where(ChatSession.id == session_id, ChatSession.owner_id == owner_id)
+    )
+    return result.scalar_one_or_none()
 
 
-async def list_sessions(session: AsyncSession) -> list[ChatSession]:
-    result = await session.execute(select(ChatSession).order_by(ChatSession.updated_at.desc()))
+async def list_sessions(session: AsyncSession, owner_id: str) -> list[ChatSession]:
+    result = await session.execute(
+        select(ChatSession).where(ChatSession.owner_id == owner_id).order_by(ChatSession.updated_at.desc())
+    )
     return list(result.scalars())
 
 
-async def list_messages(session: AsyncSession, session_id: str) -> list[ChatMessage]:
+async def list_messages(session: AsyncSession, session_id: str, owner_id: str) -> list[ChatMessage]:
     result = await session.execute(
-        select(ChatMessage).where(ChatMessage.session_id == session_id).order_by(ChatMessage.created_at.asc())
+        select(ChatMessage)
+        .join(ChatSession, ChatSession.id == ChatMessage.session_id)
+        .where(ChatMessage.session_id == session_id, ChatSession.owner_id == owner_id)
+        .order_by(ChatMessage.created_at.asc())
     )
     return list(result.scalars())
 
@@ -37,9 +45,10 @@ async def create_message(
     session: AsyncSession,
     session_id: str,
     payload: MessageCreateRequest,
+    owner_id: str,
     metadata_json: dict | None = None,
 ) -> ChatMessage:
-    chat_session = await session.get(ChatSession, session_id)
+    chat_session = await get_session(session, session_id, owner_id)
     message = ChatMessage(
         session_id=session_id,
         role=payload.role,

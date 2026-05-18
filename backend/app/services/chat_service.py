@@ -17,7 +17,7 @@ from app.connectors.mock import (
     MockTrialsConnector,
 )
 from app.orchestration.graph import build_graph
-from app.persistence.models import Run, RunStep
+from app.persistence.models import ChatSession, Run, RunStep
 from app.schemas.common import AssistantResponse
 from app.schemas.session import MessageCreateRequest
 from app.services import session_service
@@ -57,15 +57,15 @@ graph = build_graph(build_specialists())
 
 
 async def process_user_message(
-    db: AsyncSession, session_id: str, payload: MessageCreateRequest
+    db: AsyncSession, session_id: str, payload: MessageCreateRequest, owner_id: str
 ) -> tuple[str, AssistantResponse]:
-    chat_session = await session_service.get_session(db, session_id)
+    chat_session = await session_service.get_session(db, session_id, owner_id)
     if chat_session is None:
         raise HTTPException(status_code=404, detail="Session not found")
     if payload.role != "user":
         raise HTTPException(status_code=400, detail="Only user messages can be submitted to the chat endpoint")
 
-    user_message = await session_service.create_message(db, session_id, payload)
+    user_message = await session_service.create_message(db, session_id, payload, owner_id)
     run = await session_service.create_run(db, session_id, user_message.id)
     state = {
         "session_id": session_id,
@@ -97,6 +97,7 @@ async def process_user_message(
         db,
         session_id,
         MessageCreateRequest(role="assistant", content=assistant_content),
+        owner_id,
         metadata_json=stored_response,
     )
     await session_service.update_run(
@@ -111,12 +112,19 @@ async def process_user_message(
     return run.id, final_response
 
 
-async def get_run(db: AsyncSession, run_id: str) -> Run | None:
-    return await db.get(Run, run_id)
-
-
-async def list_run_steps(db: AsyncSession, run_id: str) -> list[RunStep]:
+async def get_run(db: AsyncSession, run_id: str, owner_id: str) -> Run | None:
     result = await db.execute(
-        select(RunStep).where(RunStep.run_id == run_id).order_by(RunStep.step_order.asc())
+        select(Run).join(ChatSession, ChatSession.id == Run.session_id).where(Run.id == run_id, ChatSession.owner_id == owner_id)
+    )
+    return result.scalar_one_or_none()
+
+
+async def list_run_steps(db: AsyncSession, run_id: str, owner_id: str) -> list[RunStep]:
+    result = await db.execute(
+        select(RunStep)
+        .join(Run, Run.id == RunStep.run_id)
+        .join(ChatSession, ChatSession.id == Run.session_id)
+        .where(RunStep.run_id == run_id, ChatSession.owner_id == owner_id)
+        .order_by(RunStep.step_order.asc())
     )
     return list(result.scalars())

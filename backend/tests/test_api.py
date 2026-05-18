@@ -63,3 +63,26 @@ def test_clarification_flow() -> None:
         payload = response.json()
         assert payload["response"]["status"] == "needs_clarification"
         assert payload["response"]["clarification_question"]
+
+
+def test_sessions_are_isolated_by_anonymous_cookie() -> None:
+    app = create_app()
+    with TestClient(app) as client_one, TestClient(app) as client_two:
+        session_one = client_one.post("/api/sessions", json={"title": "Client One Session"})
+        assert session_one.status_code == 200
+        session_one_id = session_one.json()["id"]
+
+        session_two = client_two.post("/api/sessions", json={"title": "Client Two Session"})
+        assert session_two.status_code == 200
+        session_two_id = session_two.json()["id"]
+
+        list_one = client_one.get("/api/sessions")
+        assert list_one.status_code == 200
+        assert [session["id"] for session in list_one.json()] == [session_one_id]
+
+        list_two = client_two.get("/api/sessions")
+        assert list_two.status_code == 200
+        assert [session["id"] for session in list_two.json()] == [session_two_id]
+
+        forbidden_session = client_one.get(f"/api/sessions/{session_two_id}")
+        assert forbidden_session.status_code == 404
