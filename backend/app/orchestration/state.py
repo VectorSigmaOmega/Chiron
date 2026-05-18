@@ -19,6 +19,7 @@ class GraphState(TypedDict, total=False):
     unresolved_gaps: list[str]
     iteration: int
     step_trace: list[dict[str, Any]]
+    emit_progress: Any
     draft_response: dict[str, Any]
     verification_result: dict[str, Any]
     final_response: dict[str, Any]

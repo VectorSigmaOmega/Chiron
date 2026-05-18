@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import time
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -120,3 +121,33 @@ def test_followup_queries_inherit_session_context() -> None:
 
         assert "drug-resistant tuberculosis" in entity_names
         assert "pregnancy" in parsed_query["clinical_modifiers"]
+
+
+def test_async_run_endpoint_replays_final_event() -> None:
+    with TestClient(create_app()) as client:
+        session_response = client.post("/api/sessions", json={"title": "Async run demo"})
+        assert session_response.status_code == 200
+        session_id = session_response.json()["id"]
+
+        start_response = client.post(
+            f"/api/sessions/{session_id}/messages/async",
+            json={"role": "user", "content": "Major safety concerns with bedaquiline in pregnancy."},
+        )
+        assert start_response.status_code == 200
+        run_id = start_response.json()["run_id"]
+
+        for _ in range(30):
+            run_response = client.get(f"/api/runs/{run_id}")
+            assert run_response.status_code == 200
+            if run_response.json()["status"] == "completed":
+                break
+            time.sleep(0.05)
+        else:
+            raise AssertionError("Async run did not complete in time")
+
+        with client.stream("GET", f"/api/runs/{run_id}/events") as event_response:
+            assert event_response.status_code == 200
+            payload = "".join(event_response.iter_text())
+
+        assert "event: final" in payload
+        assert "Response ready." in payload

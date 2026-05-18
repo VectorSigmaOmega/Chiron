@@ -37,6 +37,10 @@ class MessageRunResponse(BaseModel):
     response: AssistantResponse
 
 
+class RunStartResponse(BaseModel):
+    run_id: str
+
+
 class RunOut(BaseModel):
     id: str
     session_id: str

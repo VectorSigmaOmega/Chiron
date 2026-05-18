@@ -80,6 +80,22 @@ export interface SendMessageResult {
   response: AssistantResponse
 }
 
+export interface RunStartResult {
+  run_id: string
+}
+
+export interface RunRecord {
+  id: string
+  session_id: string
+  message_id: string | null
+  status: string
+  iteration_count: number
+  final_status: string | null
+  final_response_json: Record<string, unknown> | null
+  created_at: string
+  updated_at: string
+}
+
 export interface RunStep {
   id: string
   run_id: string
@@ -89,6 +105,17 @@ export interface RunStep {
   input_json: Record<string, unknown> | null
   output_json: Record<string, unknown> | null
   created_at: string
+}
+
+export interface RunProgressEvent {
+  type: 'status' | 'progress' | 'final' | 'error'
+  timestamp: string
+  message?: string
+  node_name?: string
+  step_order?: number
+  agent_type?: string
+  connector?: string
+  response?: AssistantResponse & { run_id?: string }
 }
 
 export interface Health {

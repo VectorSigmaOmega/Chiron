@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import json
+
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_anonymous_client_id
@@ -11,13 +14,20 @@ from app.schemas.session import (
     MessageOut,
     MessageRunResponse,
     RunOut,
+    RunStartResponse,
     RunStepOut,
     SessionCreateRequest,
     SessionOut,
 )
 from app.services import chat_service, session_service
+from app.services.progress_service import get_progress_service
 
 router = APIRouter()
+progress_service = get_progress_service()
+
+
+def _format_sse(event_name: str, data: dict) -> str:
+    return f"event: {event_name}\ndata: {json.dumps(data)}\n\n"
 
 
 @router.get("/health")
@@ -85,6 +95,17 @@ async def submit_user_message(
     return MessageRunResponse(run_id=run_id, response=assistant_response)
 
 
+@router.post("/sessions/{session_id}/messages/async", response_model=RunStartResponse)
+async def submit_user_message_async(
+    session_id: str,
+    payload: MessageCreateRequest,
+    client_id: str = Depends(get_anonymous_client_id),
+    db: AsyncSession = Depends(get_db_session),
+) -> RunStartResponse:
+    run_id = await chat_service.start_user_message_run(db, session_id, payload, client_id)
+    return RunStartResponse(run_id=run_id)
+
+
 @router.get("/runs/{run_id}", response_model=RunOut)
 async def get_run(
     run_id: str,
@@ -105,3 +126,33 @@ async def get_run_steps(
 ) -> list[RunStepOut]:
     steps = await chat_service.list_run_steps(db, run_id, client_id)
     return [RunStepOut.model_validate(step, from_attributes=True) for step in steps]
+
+
+@router.get("/runs/{run_id}/events")
+async def stream_run_events(
+    run_id: str,
+    client_id: str = Depends(get_anonymous_client_id),
+    db: AsyncSession = Depends(get_db_session),
+) -> StreamingResponse:
+    run = await chat_service.get_run(db, run_id, client_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="Run not found")
+
+    async def event_stream():
+        async for event in progress_service.subscribe(run_id):
+            raw_type = event.get("type", "progress")
+            if raw_type == "heartbeat":
+                yield ": keep-alive\n\n"
+                continue
+            event_type = "run_error" if raw_type == "error" else raw_type
+            yield _format_sse(event_type, event)
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )

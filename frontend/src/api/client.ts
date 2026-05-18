@@ -6,8 +6,10 @@
 import type {
   BackendMessage,
   Health,
+  RunProgressEvent,
+  RunRecord,
   RunStep,
-  SendMessageResult,
+  RunStartResult,
   Session,
 } from './types'
 
@@ -91,13 +93,63 @@ export const api = {
 
   /** Submit a user message and trigger a backend run. */
   sendMessage: (sessionId: string, content: string, signal?: AbortSignal) =>
-    request<SendMessageResult>(`/sessions/${sessionId}/messages`, {
+    request<RunStartResult>(`/sessions/${sessionId}/messages/async`, {
       method: 'POST',
       body: { role: 'user', content },
       signal,
     }),
 
+  /** Read the persisted run record. */
+  getRun: (runId: string, signal?: AbortSignal) =>
+    request<RunRecord>(`/runs/${runId}`, { signal }),
+
   /** Run steps — optional, used for the debug/progress view. */
   listRunSteps: (runId: string, signal?: AbortSignal) =>
     request<RunStep[]>(`/runs/${runId}/steps`, { signal }),
+
+  /** Subscribe to live progress events for a run. */
+  streamRunEvents: (
+    runId: string,
+    handlers: {
+      onProgress: (event: RunProgressEvent) => void
+      onFinal: (event: RunProgressEvent) => void
+      onError: (event: RunProgressEvent) => void
+    },
+  ) => {
+    let settled = false
+    const source = new EventSource(`${BASE_URL}/runs/${runId}/events`, {
+      withCredentials: true,
+    })
+
+    source.addEventListener('status', (ev) => {
+      handlers.onProgress(JSON.parse((ev as MessageEvent).data) as RunProgressEvent)
+    })
+    source.addEventListener('progress', (ev) => {
+      handlers.onProgress(JSON.parse((ev as MessageEvent).data) as RunProgressEvent)
+    })
+    source.addEventListener('final', (ev) => {
+      settled = true
+      handlers.onFinal(JSON.parse((ev as MessageEvent).data) as RunProgressEvent)
+      source.close()
+    })
+    source.addEventListener('run_error', (ev) => {
+      settled = true
+      handlers.onError(
+        JSON.parse((ev as MessageEvent).data) as RunProgressEvent,
+      )
+      source.close()
+    })
+    source.onerror = () => {
+      if (settled) return
+      settled = true
+      handlers.onError({
+        type: 'error',
+        timestamp: new Date().toISOString(),
+        message: 'Live progress stream disconnected.',
+      })
+      source.close()
+    }
+
+    return () => source.close()
+  },
 }

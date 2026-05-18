@@ -11,6 +11,7 @@ import type {
   AssistantStatus,
   BackendMessage,
   Health,
+  RunProgressEvent,
   Session,
 } from '../api/types'
 
@@ -23,7 +24,7 @@ export type ChatItem =
       response: AssistantResponse
       createdAt: string
     }
-  | { kind: 'pending'; key: string }
+  | { kind: 'pending'; key: string; runId?: string; progress: string[] }
 
 export type HealthState = 'checking' | 'ok' | 'down'
 
@@ -62,6 +63,12 @@ function deriveTitle(text: string): string {
   const cut = clean.slice(0, 52)
   const lastSpace = cut.lastIndexOf(' ')
   return (lastSpace > 24 ? cut.slice(0, lastSpace) : cut).trimEnd() + '…'
+}
+
+function appendProgress(progress: string[], message: string): string[] {
+  if (!message) return progress
+  if (progress[progress.length - 1] === message) return progress
+  return [...progress, message].slice(-6)
 }
 
 function isResponseShape(v: unknown): boolean {
@@ -143,6 +150,7 @@ export function useChiron() {
   const [error, setError] = useState<ChironError | null>(null)
 
   const sendingRef = useRef(false)
+  const streamCleanupRef = useRef<null | (() => void)>(null)
 
   /* ---- health ---- */
   const checkHealth = useCallback(async () => {
@@ -224,7 +232,11 @@ export function useChiron() {
           content: text,
           createdAt: new Date().toISOString(),
         },
-        { kind: 'pending', key: pendingKey },
+        {
+          kind: 'pending',
+          key: pendingKey,
+          progress: ['Starting consultation…'],
+        },
       ])
 
       let sessionId = activeId
@@ -237,24 +249,104 @@ export function useChiron() {
         }
 
         const result = await api.sendMessage(sessionId, text)
-        const response = normalizeResponse(
-          { ...result.response, run_id: result.run_id },
-          text,
-        )
         setItems((prev) =>
           prev.map((it) =>
             it.key === pendingKey
               ? {
-                  kind: 'assistant',
-                  key: result.run_id || pendingKey,
-                  response,
-                  createdAt: new Date().toISOString(),
+                  ...it,
+                  kind: 'pending',
+                  runId: result.run_id,
+                  progress: appendProgress(
+                    it.kind === 'pending' ? it.progress : [],
+                    'Connecting to live run updates…',
+                  ),
                 }
               : it,
           ),
         )
-        // keep the sidebar ordering / titles fresh, but never block on it
-        api.listSessions().then(setSessions).catch(() => {})
+
+        streamCleanupRef.current?.()
+        streamCleanupRef.current = api.streamRunEvents(result.run_id, {
+          onProgress: (event: RunProgressEvent) => {
+            setItems((prev) =>
+              prev.map((it) =>
+                it.key === pendingKey && it.kind === 'pending'
+                  ? {
+                      ...it,
+                      runId: result.run_id,
+                      progress: appendProgress(
+                        it.progress,
+                        event.message || 'Consulting the evidence…',
+                      ),
+                    }
+                  : it,
+              ),
+            )
+          },
+          onFinal: (event: RunProgressEvent) => {
+            const response = normalizeResponse(
+              (event.response as unknown as Record<string, unknown>) || {},
+              text,
+            )
+            setItems((prev) =>
+              prev.map((it) =>
+                it.key === pendingKey
+                  ? {
+                      kind: 'assistant',
+                      key: response.run_id || result.run_id || pendingKey,
+                      response,
+                      createdAt: new Date().toISOString(),
+                    }
+                  : it,
+              ),
+            )
+            api.listSessions().then(setSessions).catch(() => {})
+            streamCleanupRef.current = null
+            sendingRef.current = false
+            setSending(false)
+          },
+          onError: async (event: RunProgressEvent) => {
+            try {
+              const run = await api.getRun(result.run_id)
+              const finalRaw = (run.final_response_json ?? {}) as Record<string, unknown>
+              if (run.status === 'completed' && finalRaw.status) {
+                const response = normalizeResponse(
+                  { ...finalRaw, run_id: result.run_id },
+                  text,
+                )
+                setItems((prev) =>
+                  prev.map((it) =>
+                    it.key === pendingKey
+                      ? {
+                          kind: 'assistant',
+                          key: response.run_id || result.run_id || pendingKey,
+                          response,
+                          createdAt: new Date().toISOString(),
+                        }
+                      : it,
+                  ),
+                )
+                api.listSessions().then(setSessions).catch(() => {})
+                return
+              }
+            } catch {
+              /* fall through to user-facing error */
+            }
+
+            setItems((prev) => prev.filter((it) => it.key !== pendingKey))
+            setError({
+              scope: 'send',
+              message: event.message || 'Consultation stream failed.',
+              retry: () => {
+                setItems((prev) => prev.filter((it) => it.key !== userKey))
+                void send(text)
+              },
+            })
+            streamCleanupRef.current = null
+            sendingRef.current = false
+            setSending(false)
+          },
+        })
       } catch (err) {
         setItems((prev) => prev.filter((it) => it.key !== pendingKey))
         setError({
@@ -265,9 +357,6 @@ export function useChiron() {
             void send(text)
           },
         })
-      } finally {
-        sendingRef.current = false
-        setSending(false)
       }
     },
     [activeId],
@@ -280,7 +369,10 @@ export function useChiron() {
     void loadSessions()
     void checkHealth()
     const t = window.setInterval(checkHealth, 45_000)
-    return () => window.clearInterval(t)
+    return () => {
+      window.clearInterval(t)
+      streamCleanupRef.current?.()
+    }
   }, [loadSessions, checkHealth])
 
   const activeSession = sessions.find((s) => s.id === activeId) ?? null

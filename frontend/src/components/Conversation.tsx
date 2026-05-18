@@ -136,7 +136,18 @@ function renderItem(
         </div>
         <div className="pending">
           <ChironMark className="pending__mark" draw />
-          <span className="pending__text">Consulting the evidence…</span>
+          <div className="pending__body">
+            <span className="pending__text">
+              {it.progress[it.progress.length - 1] || 'Consulting the evidence…'}
+            </span>
+            {it.progress.length > 1 && (
+              <ul className="pending__list">
+                {it.progress.slice(0, -1).map((message, index) => (
+                  <li key={`${it.key}-${index}`}>{message}</li>
+                ))}
+              </ul>
+            )}
+          </div>
         </div>
       </div>
     )

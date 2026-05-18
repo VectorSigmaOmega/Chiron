@@ -22,16 +22,42 @@ from app.services.llm_service import get_llm_service
 settings = get_settings()
 llm_service = get_llm_service()
 
+PROGRESS_MESSAGES = {
+    "load_session_context": "Loading session context.",
+    "parse_query": "Decomposing the query.",
+    "clarify_or_plan": "Planning evidence retrieval.",
+    "dispatch_specialists": "Retrieval pass completed.",
+    "aggregate_evidence": "Aggregating evidence.",
+    "assess_gaps": "Checking for evidence gaps.",
+    "synthesize_answer": "Drafting answer from evidence.",
+    "verify_answer": "Verifying answer support.",
+    "finalize_response": "Finalizing response.",
+}
+
+
+def _emit_progress(state: dict, event: dict) -> None:
+    emitter = state.get("emit_progress")
+    if emitter:
+        emitter(event)
+
 
 def _trace(state: dict, node_name: str, input_payload: dict, output_payload: dict) -> list[dict]:
     current = list(state.get("step_trace", []))
-    current.append(
+    step = {
+        "node_name": node_name,
+        "status": "completed",
+        "input": input_payload,
+        "output": output_payload,
+    }
+    current.append(step)
+    _emit_progress(
+        state,
         {
+            "type": "progress",
             "node_name": node_name,
-            "status": "completed",
-            "input": input_payload,
-            "output": output_payload,
-        }
+            "step_order": len(current),
+            "message": PROGRESS_MESSAGES.get(node_name, node_name.replace("_", " ").title()),
+        },
     )
     return current
 
@@ -351,7 +377,25 @@ async def dispatch_specialists(state: dict, specialists: dict[str, RetrievalSpec
 
     async def run_task(task: SpecialistTask) -> dict:
         specialist = specialists[task.agent_type]
+        _emit_progress(
+            state,
+            {
+                "type": "progress",
+                "agent_type": task.agent_type,
+                "connector": specialist.connector.connector_name,
+                "message": f"{task.agent_type.replace('_', ' ').title()} agent querying {specialist.connector.connector_name}.",
+            },
+        )
         sources, evidence = await specialist.run(parsed_query, task)
+        _emit_progress(
+            state,
+            {
+                "type": "progress",
+                "agent_type": task.agent_type,
+                "connector": specialist.connector.connector_name,
+                "message": f"{task.agent_type.replace('_', ' ').title()} agent returned {len(evidence)} evidence item{'s' if len(evidence) != 1 else ''}.",
+            },
+        )
         return {
             "task": task.model_dump(mode="json"),
             "sources": [source.model_dump(mode="json") for source in sources],
