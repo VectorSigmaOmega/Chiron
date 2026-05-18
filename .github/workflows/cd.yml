@@ -82,7 +82,16 @@ jobs:
           ssh-private-key: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
 
       - name: Add server to known_hosts
-        run: ssh-keyscan -H "${{ secrets.VPS_HOST }}" >> ~/.ssh/known_hosts
+        run: |
+          for attempt in $(seq 1 10); do
+            if ssh-keyscan -H "${{ secrets.VPS_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null; then
+              if ssh-keyscan -H 161.248.163.120 >> ~/.ssh/known_hosts 2>/dev/null; then
+                exit 0
+              fi
+            fi
+            sleep 2
+          done
+          exit 1
 
       - name: Copy frontend artifact to server
         run: |
