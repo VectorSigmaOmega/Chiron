@@ -128,13 +128,8 @@ jobs:
           sudo systemctl restart chiron-backend
           sudo systemctl reload nginx
 
-          for attempt in $(seq 1 20); do
-            if curl -fsS http://127.0.0.1:8000/api/health >/dev/null; then
-              exit 0
-            fi
-            sleep 2
-          done
-
-          sudo systemctl status --no-pager chiron-backend || true
-          exit 1
+          if ! timeout 60 bash -lc 'until curl -fsS http://127.0.0.1:8000/api/health >/dev/null 2>&1; do sleep 2; done'; then
+            sudo systemctl status --no-pager chiron-backend || true
+            exit 1
+          fi
           EOF
