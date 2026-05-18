@@ -11,6 +11,7 @@ from app.core.config import Settings, get_settings
 from app.schemas.common import (
     AssistantResponse,
     Citation,
+    EvidenceAssessmentResult,
     EvidenceItem,
     InformationNeed,
     ParsedQuery,
@@ -45,6 +46,7 @@ class LLMService:
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
                 response_schema=schema_model,
+                temperature=0,
             ),
         )
         if isinstance(response.parsed, schema_model):
@@ -67,7 +69,9 @@ You are parsing a clinician's medical evidence query for an orchestration system
 Return a ParsedQuery object that:
 - rewrites the question into a cleaner search-oriented form
 - extracts medical entities
+- extracts clinical_modifiers for population constraints, comorbidities, immunologic status, resistance status, pregnancy/lactation, and care-setting qualifiers when present
 - detects if clarification is required
+- when the question is a follow-up, use the session context to resolve omitted condition, modifier, or medication context
 - sets information_needs using only these values:
   - literature
   - guidelines
@@ -108,6 +112,10 @@ Requirements:
 - If evidence is indirect for the requested population, say so explicitly.
 - Do not mention a drug, regimen, warning, study result, or comparison unless it appears in the supplied evidence items.
 - If the evidence only supports a narrow answer, answer narrowly rather than generalizing.
+- Start by answering the user's core question directly in the first sentence.
+- For treatment questions, state the current treatment position before giving caveats or uncertainty.
+- If the evidence mainly addresses a narrower subtype than the user asked about, say that explicitly instead of silently generalizing.
+- Separate treatment position, safety considerations, and uncertainty clearly.
 - evidence_strength must be one of: high, moderate, low, unknown
 
 Parsed query:
@@ -121,6 +129,46 @@ Available citations:
 """.strip()
         result = self._call_structured(model=model, prompt=prompt, schema_model=SynthesisDraft)
         return result if isinstance(result, SynthesisDraft) else None
+
+    def assess_evidence(
+        self,
+        *,
+        parsed_query: ParsedQuery,
+        evidence_items: list[EvidenceItem],
+    ) -> EvidenceAssessmentResult | None:
+        model = self.settings.gemini_verifier_model or self.settings.gemini_model
+        prompt = f"""
+You are ranking retrieved medical evidence for a clinician-facing evidence assistant.
+
+For each supplied evidence item:
+- assign question_role using only:
+  - treatment
+  - safety
+  - trial_status
+  - background
+  - uncertainty
+  - exclude
+- assign semantic_relevance from 0 to 100
+
+Guidance:
+- Use treatment when the source directly helps answer what to do clinically.
+- Use safety when the source mainly informs adverse effects, warnings, contraindications, or toxicity.
+- Use trial_status when the source mainly informs ongoing or emerging trial evidence.
+- Use uncertainty when the source is relevant mainly because it limits or qualifies the answer.
+- Use background for context that is relevant but should not drive the lead answer.
+- Use exclude for weakly related or off-target evidence that should not shape the answer.
+- Prefer direct population/modifier matches over indirect evidence.
+- Prefer evidence that directly addresses the asked clinical condition and question intent.
+- Do not omit any evidence_id from the result.
+
+Parsed query:
+{parsed_query.model_dump(mode="json")}
+
+Evidence items:
+{[item.model_dump(mode='json') for item in evidence_items]}
+""".strip()
+        result = self._call_structured(model=model, prompt=prompt, schema_model=EvidenceAssessmentResult)
+        return result if isinstance(result, EvidenceAssessmentResult) else None
 
     def verify_answer(
         self,

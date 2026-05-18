@@ -11,6 +11,23 @@ def _contains_any(text: str, needles: list[str]) -> bool:
     return any(needle in lowered for needle in needles)
 
 
+def _modifier_aliases(modifier: str) -> list[str]:
+    alias_map = {
+        "pregnancy": ["pregnan", "maternal"],
+        "hiv": ["hiv", "hiv-positive", "hiv positive"],
+        "aids": ["aids"],
+        "diabetes": ["diabetes", "diabetic"],
+        "renal_impairment": ["renal impairment", "kidney disease", "renal failure", "ckd"],
+        "hepatic_impairment": ["hepatic impairment", "liver disease", "liver failure", "cirrhosis"],
+        "pediatric": ["pediatric", "paediatric", "child", "children"],
+        "geriatric": ["elderly", "older adult", "geriatric"],
+        "immunocompromised": ["immunocompromised", "immunosuppressed"],
+        "lactation": ["breastfeeding", "lactation"],
+        "drug_resistant": ["drug-resistant", "multidrug-resistant", "rifampicin-resistant", "mdr-tb", "rr-tb"],
+    }
+    return alias_map.get(modifier, [modifier.replace("_", " ")])
+
+
 def _source_priority(source_type: str) -> int:
     return {"guideline": 4, "review": 3, "label": 3, "study": 2, "registry": 1}.get(source_type, 1)
 
@@ -42,9 +59,11 @@ def _supports_dimensions(parsed_query: ParsedQuery, task: SpecialistTask, docume
         dimensions.append("trial_status")
     if parsed_query.recency_required and document.publication_date is not None:
         dimensions.append("recency")
-    if parsed_query.pregnancy_status and _contains_any(
-        " ".join([document.title, document.abstract or "", document.metadata.get("population", "")]),
-        ["pregnan", "maternal"],
+    requested_modifiers = set(parsed_query.clinical_modifiers)
+    modifier_text = " ".join([document.title, document.abstract or "", document.metadata.get("population", "")]).lower()
+    if requested_modifiers and any(
+        any(alias in modifier_text for alias in _modifier_aliases(modifier))
+        for modifier in requested_modifiers
     ):
         dimensions.append("population")
     return sorted(set(dimensions))
@@ -66,13 +85,23 @@ def _claim_type(parsed_query: ParsedQuery, task: SpecialistTask, document: Sourc
 
 
 def _applicability(parsed_query: ParsedQuery, document: SourceDocument) -> str:
-    if not parsed_query.population and not parsed_query.pregnancy_status:
+    requested_modifiers = {
+        modifier
+        for modifier in parsed_query.clinical_modifiers
+        if modifier not in {"adult", "outpatient", "inpatient"}
+    }
+    if not parsed_query.population and not parsed_query.pregnancy_status and not requested_modifiers:
         return "general"
     text = " ".join(
         [document.title, document.abstract or "", document.metadata.get("population", ""), document.metadata.get("condition", "")]
     ).lower()
-    if parsed_query.pregnancy_status:
-        return "direct" if "pregnan" in text or "maternal" in text else "indirect"
+    matched_modifiers = {
+        modifier
+        for modifier in requested_modifiers
+        if any(alias in text for alias in _modifier_aliases(modifier))
+    }
+    if requested_modifiers:
+        return "direct" if matched_modifiers == requested_modifiers else "indirect"
     if parsed_query.population and parsed_query.population.lower() in text:
         return "direct"
     return "general"

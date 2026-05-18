@@ -61,9 +61,28 @@ def _extract_eligibility_snapshot(eligibility_module: dict[str, Any]) -> dict[st
 
 
 def _infer_population(parsed_query: ParsedQuery, conditions: list[str], summary: str | None) -> str | None:
-    haystack = " ".join([*conditions, summary or "", parsed_query.population or "", parsed_query.pregnancy_status or ""]).lower()
+    haystack = " ".join(
+        [
+            *conditions,
+            summary or "",
+            parsed_query.population or "",
+            parsed_query.pregnancy_status or "",
+            " ".join(parsed_query.clinical_modifiers),
+            " ".join(parsed_query.comorbidities),
+        ]
+    ).lower()
     if "pregnan" in haystack or "maternal" in haystack:
         return "pregnant patients"
+    if "hiv" in haystack or "aids" in haystack:
+        return "patients with HIV/AIDS"
+    if "diabet" in haystack:
+        return "patients with diabetes"
+    if "renal" in haystack or "kidney" in haystack or "ckd" in haystack:
+        return "patients with renal impairment"
+    if "hepatic" in haystack or "liver" in haystack or "cirrhosis" in haystack:
+        return "patients with hepatic impairment"
+    if "immunocompromised" in haystack or "immunosuppressed" in haystack:
+        return "immunocompromised patients"
     if parsed_query.population:
         return parsed_query.population
     return None

@@ -18,7 +18,7 @@ from app.connectors.mock import (
 )
 from app.orchestration.graph import build_graph
 from app.persistence.models import ChatSession, Run, RunStep
-from app.schemas.common import AssistantResponse
+from app.schemas.common import AssistantResponse, EntityRef, EvidenceItem, ParsedQuery
 from app.schemas.session import MessageCreateRequest
 from app.services import session_service
 
@@ -54,6 +54,51 @@ def build_specialists() -> dict[str, RetrievalSpecialist]:
 
 
 graph = build_graph(build_specialists())
+
+
+def _merge_unique_str(left: list[str], right: list[str]) -> list[str]:
+    return list(dict.fromkeys([*left, *right]))
+
+
+def _build_session_context(previous_context: dict, result: dict, final_response: AssistantResponse) -> dict:
+    parsed_query = ParsedQuery.model_validate(result.get("parsed_query", {}))
+    evidence_items = [EvidenceItem.model_validate(item) for item in result.get("evidence_items", [])]
+    previous_entities = [EntityRef.model_validate(item) for item in previous_context.get("active_entities", [])]
+
+    current_entities = parsed_query.entities or previous_entities
+    medications = _merge_unique_str(
+        list(previous_context.get("medications", [])),
+        _merge_unique_str(
+            parsed_query.medications,
+            [entity.name for entity in parsed_query.entities if entity.kind.lower() == "drug"]
+            + [drug for item in evidence_items for drug in item.extracted_entities],
+        ),
+    )
+
+    return {
+        "active_entities": [entity.model_dump(mode="json") for entity in current_entities],
+        "clinical_modifiers": _merge_unique_str(
+            list(previous_context.get("clinical_modifiers", [])),
+            parsed_query.clinical_modifiers,
+        ),
+        "comorbidities": _merge_unique_str(
+            list(previous_context.get("comorbidities", [])),
+            parsed_query.comorbidities,
+        ),
+        "medications": medications,
+        "population": parsed_query.population or previous_context.get("population"),
+        "setting": parsed_query.setting or previous_context.get("setting"),
+        "last_question": parsed_query.original_question,
+        "last_answer_status": final_response.status,
+        "last_question_roles": list(
+            dict.fromkeys(
+                [
+                    (item.question_role or item.claim_type or "background")
+                    for item in evidence_items[:4]
+                ]
+            )
+        ),
+    }
 
 
 async def process_user_message(
@@ -108,6 +153,8 @@ async def process_user_message(
         final_status=final_response.status,
         final_response_json=stored_response,
     )
+    updated_context = _build_session_context(chat_session.context_json or {}, result, final_response)
+    await session_service.update_session_context(db, session_id, owner_id, updated_context)
     await session_service.store_run_steps(db, run.id, result.get("step_trace", []))
     return run.id, final_response
 

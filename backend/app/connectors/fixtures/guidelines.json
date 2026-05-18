@@ -1,6 +1,17 @@
 {
   "guidelines": [
     {
+      "source_id": "guideline_tb_general_pregnancy_fixture_001",
+      "title": "Curated fixture guidance for tuberculosis treatment in pregnancy",
+      "url": "https://example.org/guidelines/tuberculosis-pregnancy",
+      "publication_date": "2025-09-20",
+      "publisher": "Curated Demo Guidance",
+      "condition": "tuberculosis",
+      "population": "pregnancy",
+      "summary": "Available guidance suggests treating active tuberculosis in pregnancy promptly with standard evidence-based regimens when drug susceptibility is expected, while reviewing regimen choice, maternal risk, and fetal safety case by case when evidence is limited.",
+      "keywords": ["tuberculosis", "tb", "pregnan", "treatment", "pregnancy"]
+    },
+    {
       "source_id": "guideline_tb_pregnancy_fixture_001",
       "title": "Curated fixture guidance for drug-resistant tuberculosis in pregnancy",
       "url": "https://example.org/guidelines/drug-resistant-tuberculosis-pregnancy",
@@ -9,7 +20,8 @@
       "condition": "drug-resistant tuberculosis",
       "population": "pregnancy",
       "summary": "Pregnancy-specific management of drug-resistant tuberculosis should involve specialist consultation, individualized regimen review, and careful safety monitoring when newer agents are considered.",
-      "keywords": ["tuberculosis", "tb", "pregnan", "drug-resistant"]
+      "keywords": ["tuberculosis", "tb", "pregnan", "drug-resistant", "mdr-tb", "rr-tb"],
+      "required_keywords": ["pregnan"]
     },
     {
       "source_id": "guideline_pneumonia_fixture_001",

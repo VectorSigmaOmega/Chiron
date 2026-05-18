@@ -128,6 +128,8 @@ def _population_terms(parsed_query: ParsedQuery) -> list[str]:
         [
             parsed_query.population or "",
             parsed_query.pregnancy_status or "",
+            " ".join(parsed_query.clinical_modifiers),
+            " ".join(parsed_query.comorbidities),
             parsed_query.original_question,
             parsed_query.rewritten_question,
         ]
@@ -135,10 +137,26 @@ def _population_terms(parsed_query: ParsedQuery) -> list[str]:
     terms: list[str] = []
     if "pregnan" in haystack:
         terms.extend(["pregnancy", "pregnant", "maternal"])
+    if "hiv" in haystack:
+        terms.extend(["HIV", "HIV-positive", "acquired immunodeficiency syndrome"])
+    if "aids" in haystack:
+        terms.append("AIDS")
+    if "diabet" in haystack:
+        terms.extend(["diabetes", "diabetic"])
+    if "renal" in haystack or "kidney" in haystack or "ckd" in haystack:
+        terms.extend(["renal impairment", "kidney disease", "chronic kidney disease"])
+    if "hepatic" in haystack or "liver" in haystack or "cirrhosis" in haystack:
+        terms.extend(["hepatic impairment", "liver disease", "cirrhosis"])
     if "pediatric" in haystack or "child" in haystack:
         terms.extend(["child", "pediatric"])
     if "adult" in haystack:
         terms.append("adult")
+    if "elderly" in haystack or "geriatric" in haystack or "older adult" in haystack:
+        terms.extend(["elderly", "geriatric", "older adults"])
+    if "immunocompromised" in haystack or "immunosuppressed" in haystack:
+        terms.extend(["immunocompromised", "immunosuppressed"])
+    if "breastfeeding" in haystack or "lactation" in haystack:
+        terms.extend(["breastfeeding", "lactation"])
     return _unique_terms(terms)
 
 

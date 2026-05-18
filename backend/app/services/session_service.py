@@ -92,6 +92,22 @@ async def update_run(
     return run
 
 
+async def update_session_context(
+    session: AsyncSession,
+    session_id: str,
+    owner_id: str,
+    context_json: dict,
+) -> ChatSession | None:
+    chat_session = await get_session(session, session_id, owner_id)
+    if chat_session is None:
+        return None
+    chat_session.context_json = context_json
+    chat_session.updated_at = datetime.now(UTC)
+    await session.commit()
+    await session.refresh(chat_session)
+    return chat_session
+
+
 async def store_run_steps(session: AsyncSession, run_id: str, step_trace: list[dict]) -> None:
     for index, step in enumerate(step_trace, start=1):
         session.add(

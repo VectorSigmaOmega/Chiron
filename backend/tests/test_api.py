@@ -86,3 +86,37 @@ def test_sessions_are_isolated_by_anonymous_cookie() -> None:
 
         forbidden_session = client_one.get(f"/api/sessions/{session_two_id}")
         assert forbidden_session.status_code == 404
+
+
+def test_followup_queries_inherit_session_context() -> None:
+    with TestClient(create_app()) as client:
+        session_response = client.post("/api/sessions", json={"title": "Follow-up context demo"})
+        assert session_response.status_code == 200
+        session_id = session_response.json()["id"]
+
+        first = client.post(
+            f"/api/sessions/{session_id}/messages",
+            json={
+                "role": "user",
+                "content": "Latest treatment for drug-resistant TB in pregnancy, and major safety concerns.",
+            },
+        )
+        assert first.status_code == 200
+
+        second = client.post(
+            f"/api/sessions/{session_id}/messages",
+            json={"role": "user", "content": "What about safety?"},
+        )
+        assert second.status_code == 200
+        second_payload = second.json()
+        assert second_payload["response"]["status"] == "answered"
+
+        run_id = second_payload["run_id"]
+        steps_response = client.get(f"/api/runs/{run_id}/steps")
+        assert steps_response.status_code == 200
+        parse_step = next(step for step in steps_response.json() if step["node_name"] == "parse_query")
+        parsed_query = parse_step["output_json"]["parsed_query"]
+        entity_names = [entity["name"] for entity in parsed_query["entities"]]
+
+        assert "drug-resistant tuberculosis" in entity_names
+        assert "pregnancy" in parsed_query["clinical_modifiers"]

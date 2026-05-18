@@ -1,6 +1,16 @@
 {
   "cases": [
     {
+      "case_id": "tb_general_pregnancy_latest",
+      "category": "treatment_answer",
+      "difficulty": "medium",
+      "question": "Latest treatment for TB in pregnant women.",
+      "expected_status": "answered",
+      "expected_substrings": ["standard"],
+      "expected_min_citations": 1,
+      "expected_min_evidence_items": 1
+    },
+    {
       "case_id": "tb_pregnancy_latest",
       "category": "multi_source_answer",
       "difficulty": "hard",
@@ -49,11 +59,34 @@
       "expected_min_evidence_items": 1
     },
     {
+      "case_id": "tb_hiv_pregnancy_latest",
+      "category": "modifier_answer",
+      "difficulty": "hard",
+      "question": "Latest treatment for TB in pregnant women with HIV.",
+      "expected_status": "answered",
+      "expected_min_citations": 1,
+      "expected_min_evidence_items": 1
+    },
+    {
       "case_id": "pneumonia_underspecified",
       "category": "clarification",
       "difficulty": "normal",
       "question": "Best treatment for pneumonia?",
       "expected_status": "needs_clarification"
+    },
+    {
+      "case_id": "followup_bedaquiline_safety",
+      "category": "followup_context",
+      "difficulty": "hard",
+      "question": "ignored when turns are present",
+      "turns": [
+        "Latest treatment for drug-resistant TB in pregnancy, and major safety concerns.",
+        "What about safety?"
+      ],
+      "expected_status": "answered",
+      "expected_substrings": ["qt prolongation"],
+      "expected_min_citations": 1,
+      "expected_min_evidence_items": 1
     },
     {
       "case_id": "insurance_scope_gap",

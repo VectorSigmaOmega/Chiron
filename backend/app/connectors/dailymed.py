@@ -51,6 +51,10 @@ def _extract_drug_name(parsed_query: ParsedQuery, task: SpecialistTask) -> str |
     for entity in parsed_query.entities:
         if entity.kind == "drug":
             return entity.name
+    for medication in parsed_query.medications:
+        cleaned = medication.strip()
+        if cleaned:
+            return cleaned
     return None
 
 

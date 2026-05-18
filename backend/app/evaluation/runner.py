@@ -19,6 +19,7 @@ class BenchmarkCase(BaseModel):
     category: str = "general"
     difficulty: str = "normal"
     question: str
+    turns: list[str] = Field(default_factory=list)
     expected_status: str
     expected_abstention_class: str | None = None
     expected_substrings: list[str] = Field(default_factory=list)
@@ -146,12 +147,16 @@ def run_benchmark(path: str | Path, *, label: str | None = None) -> EvaluationRe
             session.raise_for_status()
             session_id = session.json()["id"]
 
-            response = client.post(
-                f"/api/sessions/{session_id}/messages",
-                json={"role": "user", "content": case.question},
-            )
-            response.raise_for_status()
-            payload = response.json()
+            turns = case.turns or [case.question]
+            payload = None
+            for turn in turns:
+                response = client.post(
+                    f"/api/sessions/{session_id}/messages",
+                    json={"role": "user", "content": turn},
+                )
+                response.raise_for_status()
+                payload = response.json()
+            assert payload is not None
             assistant_response = AssistantResponse.model_validate(payload["response"])
             case_result = compare_case(case, assistant_response).model_copy(
                 update={"duration_ms": round((perf_counter() - started) * 1000, 2)}

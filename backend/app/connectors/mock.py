@@ -16,7 +16,7 @@ class MockGuidelineConnector(BaseConnector):
 
     async def search(self, parsed_query: ParsedQuery, task: SpecialistTask) -> list[SourceDocument]:
         question = parsed_query.original_question.lower()
-        if "tuberculosis" in question or "tb" in question:
+        if _contains_any(question, ["drug-resistant", "mdr-tb", "rr-tb"]):
             return [
                 SourceDocument(
                     source_id="guide_tb_pregnancy_001",
@@ -27,6 +27,22 @@ class MockGuidelineConnector(BaseConnector):
                     publisher="Curated Demo Guideline",
                     abstract="Pregnancy-specific management of drug-resistant TB should involve specialist consultation and individualized risk-benefit review.",
                     metadata={"condition": "drug-resistant tuberculosis", "population": "pregnancy"},
+                )
+            ]
+        if "tuberculosis" in question or "tb" in question:
+            abstract = "Standard evidence-based regimens remain the default approach for active tuberculosis in pregnancy when drug susceptibility is expected."
+            if "hiv" in question:
+                abstract += " In pregnant patients with HIV, co-management and drug interaction review are particularly important."
+            return [
+                SourceDocument(
+                    source_id="guide_tb_general_001",
+                    source_type="guideline",
+                    title="Mock TB guideline for treatment in pregnancy",
+                    url="https://example.org/guidelines/tb-pregnancy-general",
+                    publication_date=date(2025, 7, 10),
+                    publisher="Curated Demo Guideline",
+                    abstract=abstract,
+                    metadata={"condition": "tuberculosis", "population": "pregnancy"},
                 )
             ]
         if _contains_any(question, ["pneumonia", "sepsis"]):
@@ -50,7 +66,7 @@ class MockLiteratureConnector(BaseConnector):
 
     async def search(self, parsed_query: ParsedQuery, task: SpecialistTask) -> list[SourceDocument]:
         question = parsed_query.original_question.lower()
-        if "tuberculosis" in question or "tb" in question:
+        if _contains_any(question, ["drug-resistant", "mdr-tb", "rr-tb"]):
             return [
                 SourceDocument(
                     source_id="pubmed_tb_2026_001",
@@ -65,6 +81,22 @@ class MockLiteratureConnector(BaseConnector):
                         "candidate_drugs": ["bedaquiline", "linezolid"],
                         "mentions_safety_gap": True,
                     },
+                )
+            ]
+        if "tuberculosis" in question or "tb" in question:
+            abstract = "Standard evidence-based regimens remain recommended for active tuberculosis in pregnancy, although pregnancy-specific comparative evidence remains limited."
+            if "hiv" in question:
+                abstract += " Women living with HIV require additional drug interaction review and close monitoring."
+            return [
+                SourceDocument(
+                    source_id="pubmed_tb_general_001",
+                    source_type="review",
+                    title="Mock review of tuberculosis treatment in pregnancy",
+                    url="https://pubmed.ncbi.nlm.nih.gov/mock-tb-general-pregnancy",
+                    publication_date=date(2025, 5, 15),
+                    publisher="PubMed",
+                    abstract=abstract,
+                    metadata={"condition": "tuberculosis", "population": "pregnancy"},
                 )
             ]
         if "side effect" in question or "adverse" in question:
@@ -88,8 +120,14 @@ class MockDrugSafetyConnector(BaseConnector):
 
     async def search(self, parsed_query: ParsedQuery, task: SpecialistTask) -> list[SourceDocument]:
         lowered_entities = {entity.name.lower() for entity in parsed_query.entities}
+        lowered_medications = {medication.lower() for medication in parsed_query.medications}
         focus = " ".join(task.focus_entities).lower()
-        if "bedaquiline" in focus or "bedaquiline" in lowered_entities or "tb" in parsed_query.original_question.lower():
+        if (
+            "bedaquiline" in focus
+            or "bedaquiline" in lowered_entities
+            or "bedaquiline" in lowered_medications
+            or "tb" in parsed_query.original_question.lower()
+        ):
             return [
                 SourceDocument(
                     source_id="dailymed_bedaquiline_mock",

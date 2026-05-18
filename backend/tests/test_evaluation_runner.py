@@ -66,3 +66,16 @@ def test_compare_case_fails_on_status_and_missing_substrings() -> None:
     assert result.passed is False
     assert result.actual_status == "answered"
     assert "care setting" in result.missing_substrings
+
+
+def test_benchmark_case_accepts_turns() -> None:
+    case = BenchmarkCase(
+        case_id="followup_case",
+        category="followup",
+        difficulty="normal",
+        question="ignored when turns are present",
+        turns=["Latest treatment for TB in pregnancy", "What about safety?"],
+        expected_status="answered",
+    )
+
+    assert case.turns == ["Latest treatment for TB in pregnancy", "What about safety?"]

@@ -59,6 +59,8 @@ class EvidenceItem(BaseModel):
     evidence_strength: str = "unknown"
     source_priority: int = 0
     extracted_entities: list[str] = Field(default_factory=list)
+    question_role: str | None = None
+    semantic_relevance: int | None = None
 
 
 class ParsedQuery(BaseModel):
@@ -68,6 +70,7 @@ class ParsedQuery(BaseModel):
     population: str | None = None
     setting: str | None = None
     pregnancy_status: str | None = None
+    clinical_modifiers: list[str] = Field(default_factory=list)
     comorbidities: list[str] = Field(default_factory=list)
     medications: list[str] = Field(default_factory=list)
     recency_required: bool = False
@@ -100,6 +103,16 @@ class VerificationResult(BaseModel):
     conflicts: list[str] = Field(default_factory=list)
     abstention_class: str | None = None
     abstention_reason: str | None = None
+
+
+class EvidenceAssessment(BaseModel):
+    evidence_id: str
+    question_role: str
+    semantic_relevance: int = Field(ge=0, le=100)
+
+
+class EvidenceAssessmentResult(BaseModel):
+    items: list[EvidenceAssessment] = Field(default_factory=list)
 
 
 class AssistantResponse(BaseModel):

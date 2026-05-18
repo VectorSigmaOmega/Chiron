@@ -121,3 +121,48 @@ async def test_pubmed_connector_returns_normalized_documents() -> None:
     assert documents[0].abstract is not None
     assert "pregnancy-specific safety data" in documents[0].abstract
     assert documents[0].publication_date is not None
+
+
+async def test_pubmed_connector_includes_general_clinical_modifiers_in_query() -> None:
+    seen_terms: list[str] = []
+
+    def _mock_pubmed_hiv_transport(request: httpx.Request) -> httpx.Response:
+        parsed = urlparse(str(request.url))
+        query = parse_qs(parsed.query)
+        if parsed.path.endswith("/esearch.fcgi"):
+            seen_terms.append(query["term"][0].lower())
+            return httpx.Response(200, json={"esearchresult": {"idlist": []}})
+        if parsed.path.endswith("/esummary.fcgi"):
+            return httpx.Response(200, json={"result": {"uids": []}})
+        if parsed.path.endswith("/efetch.fcgi"):
+            return httpx.Response(200, text="<PubmedArticleSet />")
+        raise AssertionError(f"Unexpected URL: {request.url}")
+
+    connector = PubMedConnector(
+        settings=Settings(
+            literature_connector_mode="pubmed",
+            pubmed_base_url="https://eutils.ncbi.nlm.nih.gov/entrez/eutils",
+        ),
+        transport=httpx.MockTransport(_mock_pubmed_hiv_transport),
+    )
+    parsed_query = ParsedQuery(
+        original_question="Latest TB treatment in patients with HIV",
+        rewritten_question="Latest TB treatment in patients with HIV",
+        recency_required=True,
+        clinical_modifiers=["hiv"],
+        comorbidities=["hiv"],
+        entities=[],
+    )
+    task = SpecialistTask(
+        task_id="task-hiv",
+        agent_type="literature",
+        goal="Search literature",
+        subquery=parsed_query.rewritten_question,
+        depends_on=[],
+        focus_entities=["tuberculosis"],
+    )
+
+    documents = await connector.search(parsed_query, task)
+
+    assert documents == []
+    assert any("hiv" in term and "tuberculosis" in term for term in seen_terms)
