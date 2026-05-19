@@ -8,7 +8,7 @@ import httpx
 
 from app.connectors.base import BaseConnector
 from app.core.config import Settings, get_settings
-from app.schemas.common import ParsedQuery, SourceDocument, SpecialistTask
+from app.schemas.common import NormalizedQuery, SourceDocument, SpecialistTask
 
 
 def _parse_dailymed_date(value: str | None) -> date | None:
@@ -43,18 +43,16 @@ def _parse_dailymed_date(value: str | None) -> date | None:
     return date(year, month, day)
 
 
-def _extract_drug_name(parsed_query: ParsedQuery, task: SpecialistTask) -> str | None:
-    for entity in task.focus_entities:
-        cleaned = entity.strip()
-        if cleaned and cleaned.lower() not in {"drug-resistant tuberculosis", "tuberculosis"}:
-            return cleaned
-    for entity in parsed_query.entities:
-        if entity.kind == "drug":
-            return entity.name
-    for medication in parsed_query.medications:
-        cleaned = medication.strip()
+def _extract_drug_name(normalized_query: NormalizedQuery, task: SpecialistTask) -> str | None:
+    for term in task.focus_terms:
+        cleaned = term.strip()
         if cleaned:
             return cleaned
+    for entity in normalized_query.entities:
+        if entity.category.lower() in {"drug", "medication", "therapy", "intervention"}:
+            return entity.normalized_text or entity.text
+    if task.source_query.strip():
+        return task.source_query.strip()
     return None
 
 
@@ -64,25 +62,6 @@ def _xml_text(root: ElementTree.Element) -> str:
 
 def _normalize_whitespace(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
-
-
-def _extract_warning_signals(text: str) -> list[str]:
-    haystack = text.lower()
-    signal_map = [
-        ("qt prolongation", ["qt prolongation", "prolongation of the qt"]),
-        ("hepatotoxicity", ["hepatotoxicity", "hepatic adverse"]),
-        ("boxed warning", ["boxed warning"]),
-        ("contraindications", ["contraindication", "contraindications"]),
-        ("myelosuppression", ["myelosuppression"]),
-        ("peripheral neuropathy", ["peripheral neuropathy", "neuropathy"]),
-        ("embryo-fetal toxicity", ["embryo-fetal toxicity", "fetal toxicity", "pregnancy"]),
-        ("drug interactions", ["drug interactions", "interaction"]),
-    ]
-    extracted: list[str] = []
-    for label, needles in signal_map:
-        if any(needle in haystack for needle in needles):
-            extracted.append(label)
-    return extracted
 
 
 def _section_text(root: ElementTree.Element, keywords: list[str]) -> str | None:
@@ -98,14 +77,11 @@ def _section_text(root: ElementTree.Element, keywords: list[str]) -> str | None:
 def _build_label_summary(
     *,
     title: str,
-    warning_signals: list[str],
     boxed_warning_text: str | None,
     warnings_text: str | None,
     contraindications_text: str | None,
 ) -> str:
     fragments = [title]
-    if warning_signals:
-        fragments.append(f"Key label signals: {', '.join(warning_signals)}.")
     if boxed_warning_text:
         fragments.append(boxed_warning_text[:260] + ("..." if len(boxed_warning_text) > 260 else ""))
     elif warnings_text:
@@ -141,8 +117,8 @@ class DailyMedConnector(BaseConnector):
         response.raise_for_status()
         return response.text
 
-    async def search(self, parsed_query: ParsedQuery, task: SpecialistTask) -> list[SourceDocument]:
-        drug_name = _extract_drug_name(parsed_query, task)
+    async def search(self, normalized_query: NormalizedQuery, task: SpecialistTask) -> list[SourceDocument]:
+        drug_name = _extract_drug_name(normalized_query, task)
         if not drug_name:
             return []
         timeout = httpx.Timeout(20.0, connect=10.0)
@@ -159,8 +135,6 @@ class DailyMedConnector(BaseConnector):
                     continue
                 xml_text = await self._fetch_label_xml(client, setid)
                 root = ElementTree.fromstring(xml_text)
-                flattened = _xml_text(root)
-                safety_notes = _extract_warning_signals(flattened)
                 boxed_warning_text = _section_text(root, ["boxed warning"])
                 warnings_text = _section_text(root, ["warnings and precautions", "warnings"])
                 contraindications_text = _section_text(root, ["contraindications"])
@@ -175,7 +149,6 @@ class DailyMedConnector(BaseConnector):
                         publisher="DailyMed",
                         abstract=_build_label_summary(
                             title=title,
-                            warning_signals=safety_notes,
                             boxed_warning_text=boxed_warning_text,
                             warnings_text=warnings_text,
                             contraindications_text=contraindications_text,
@@ -184,7 +157,6 @@ class DailyMedConnector(BaseConnector):
                         metadata={
                             "drug": drug_name,
                             "spl_version": record.get("spl_version"),
-                            "warnings": safety_notes,
                             "boxed_warning_excerpt": boxed_warning_text,
                             "warnings_excerpt": warnings_text,
                             "contraindications_excerpt": contraindications_text,

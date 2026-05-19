@@ -2,19 +2,27 @@ from __future__ import annotations
 
 from functools import lru_cache
 from json import JSONDecodeError
+from uuid import uuid4
 
 from google import genai
-from pydantic import BaseModel, Field, ValidationError
 from google.genai import types
+from pydantic import BaseModel, Field, ValidationError
 
 from app.core.config import Settings, get_settings
 from app.schemas.common import (
     AssistantResponse,
     Citation,
+    EvidenceAssessment,
     EvidenceAssessmentResult,
+    EvidenceCoverageDecision,
     EvidenceItem,
-    InformationNeed,
-    ParsedQuery,
+    EvidencePlan,
+    NormalizedQuery,
+    PlannedSubquestion,
+    QueryConstraint,
+    QueryEntity,
+    RetrievalSpec,
+    ScopeDecision,
     VerificationResult,
 )
 
@@ -61,26 +69,233 @@ class LLMService:
         except (ValidationError, JSONDecodeError, TypeError):
             return None
 
-    def parse_query(self, *, question: str, session_context: dict) -> ParsedQuery | None:
+    def _stub_normalize_query(self, *, question: str, session_context: dict) -> NormalizedQuery:
+        trimmed = question.strip()
+        normalized = " ".join(trimmed.split())
+        lowered = normalized.lower()
+        followup_prefixes = ("what about", "how about", "and what", "and how", "what if", "is it safe")
+        context_entities = session_context.get("active_entities", [])
+        active_terms = list(session_context.get("active_terms", []))
+        entities: list[QueryEntity] = []
+        for item in context_entities:
+            try:
+                entity = QueryEntity.model_validate(item)
+            except ValidationError:
+                continue
+            entities.append(entity)
+        session_context_used = False
+        if session_context and any(lowered.startswith(prefix) for prefix in followup_prefixes):
+            context_terms = active_terms or [entity.normalized_text for entity in entities]
+            if context_terms:
+                normalized = f"{normalized.rstrip('?')} in the context of {', '.join(context_terms[:3])}"
+                session_context_used = True
+        if not entities and normalized:
+            entities.append(
+                QueryEntity(
+                    text=normalized,
+                    normalized_text=normalized,
+                    category="clinical_topic",
+                    role="primary",
+                    salience="primary",
+                )
+            )
+        return NormalizedQuery(
+            raw_question=question,
+            normalized_question=normalized,
+            intent_summary="Deterministic stub normalization for local test mode.",
+            scope=ScopeDecision(in_scope=True, reason=None),
+            needs_clarification=False,
+            clarification_question=None,
+            ambiguity_notes=[],
+            entities=entities,
+            constraints=[],
+            recency_focus=any(token in normalized.lower() for token in ["latest", "recent", "current"]),
+            session_context_used=session_context_used,
+            normalization_notes=[],
+        )
+
+    def _stub_plan_evidence(self, *, normalized_query: NormalizedQuery, session_context: dict) -> EvidencePlan:
+        text = normalized_query.normalized_question
+        lowered = text.lower()
+        specs = [
+            RetrievalSpec(
+                spec_id=str(uuid4()),
+                lane="literature",
+                objective="Retrieve supporting medical literature.",
+                rationale="Literature search is the default retrieval lane in local stub mode.",
+                query_text=text,
+                source_query=text,
+                focus_terms=[entity.normalized_text for entity in normalized_query.entities[:4]],
+                desired_result_count=5,
+                priority="high",
+            )
+        ]
+        if any(token in lowered for token in ["treatment", "management", "guideline", "first-line", "first line"]):
+            specs.insert(
+                0,
+                RetrievalSpec(
+                    spec_id=str(uuid4()),
+                    lane="guideline",
+                    objective="Retrieve guideline or standard-of-care evidence.",
+                    rationale="Treatment-style questions should check guidance in local stub mode.",
+                    query_text=text,
+                    source_query=text,
+                    focus_terms=[entity.normalized_text for entity in normalized_query.entities[:4]],
+                    desired_result_count=2,
+                    priority="high",
+                ),
+            )
+        if any(token in lowered for token in ["latest", "recent", "trial", "investigational", "experimental"]):
+            specs.append(
+                RetrievalSpec(
+                    spec_id=str(uuid4()),
+                    lane="trials",
+                    objective="Retrieve emerging or ongoing trial evidence.",
+                    rationale="Recency-sensitive questions may benefit from trial registry evidence in local stub mode.",
+                    query_text=text,
+                    source_query=text,
+                    focus_terms=[entity.normalized_text for entity in normalized_query.entities[:4]],
+                    desired_result_count=3,
+                    priority="medium",
+                )
+            )
+        if any(token in lowered for token in ["safety", "safe", "side effect", "warning", "adverse"]):
+            specs.append(
+                RetrievalSpec(
+                    spec_id=str(uuid4()),
+                    lane="drug_safety",
+                    objective="Retrieve drug-label or safety evidence.",
+                    rationale="Safety language is present in the question in local stub mode.",
+                    query_text=text,
+                    source_query=text,
+                    focus_terms=[entity.normalized_text for entity in normalized_query.entities[:4]],
+                    desired_result_count=3,
+                    priority="medium",
+                )
+            )
+        return EvidencePlan(
+            normalized_question=text,
+            primary_goal="Answer the user question with grounded evidence.",
+            answer_strategy="Lead with the direct answer, then add caveats and emerging evidence if relevant.",
+            subquestions=[PlannedSubquestion(question=text, priority="high")],
+            retrieval_specs=specs,
+        )
+
+    def _stub_assess_evidence(
+        self,
+        *,
+        normalized_query: NormalizedQuery,
+        evidence_plan: EvidencePlan,
+        evidence_items: list[EvidenceItem],
+    ) -> EvidenceAssessmentResult:
+        items: list[EvidenceAssessment] = []
+        lowered_question = normalized_query.normalized_question.lower()
+        for evidence in evidence_items:
+            lowered = " ".join([evidence.title, evidence.key_claim, evidence.source_type]).lower()
+            role = "supporting evidence"
+            dimensions: list[str] = []
+            if any(token in lowered_question for token in ["treatment", "management", "guideline"]):
+                dimensions.append("direct answer")
+            if any(token in lowered_question for token in ["safety", "safe", "warning", "adverse"]):
+                dimensions.append("safety context")
+            relevance = 50
+            if evidence.source_type == "guideline":
+                relevance += 25
+                role = "guideline evidence"
+            elif evidence.source_type == "review":
+                relevance += 15
+                role = "review evidence"
+            elif evidence.source_type == "registry":
+                relevance += 5
+                role = "emerging evidence"
+            include = True
+            if "public health achievements" in lowered:
+                include = False
+                relevance = 10
+                role = "off-target background"
+            items.append(
+                EvidenceAssessment(
+                    evidence_id=evidence.evidence_id,
+                    question_role=role,
+                    claim_type=role,
+                    applicability="direct evidence" if include else "background only",
+                    supports_question_dimensions=dimensions,
+                    semantic_relevance=max(0, min(100, relevance)),
+                    include_in_answer=include,
+                    assessment_summary="Deterministic stub assessment for local test mode.",
+                )
+            )
+        return EvidenceAssessmentResult(items=items)
+
+    def _stub_assess_coverage(
+        self,
+        *,
+        normalized_query: NormalizedQuery,
+        evidence_plan: EvidencePlan,
+        evidence_items: list[EvidenceItem],
+        completed_lanes: list[str],
+        iteration: int,
+    ) -> EvidenceCoverageDecision:
+        if evidence_items:
+            return EvidenceCoverageDecision(
+                answerable_now=True,
+                needs_follow_up=False,
+                rationale="Stub mode considers the current evidence set sufficient once any evidence exists.",
+                remaining_gaps=[],
+                follow_up_specs=[],
+            )
+        return EvidenceCoverageDecision(
+            answerable_now=False,
+            needs_follow_up=False,
+            rationale="Stub mode could not retrieve any evidence.",
+            remaining_gaps=["no_retrieved_evidence"],
+            follow_up_specs=[],
+        )
+
+    def _stub_verify_answer(self, *, draft_response: AssistantResponse) -> VerificationResult:
+        if draft_response.status != "answered":
+            return VerificationResult(
+                status="abstain" if draft_response.status == "abstained" else "clarify",
+                supported_claims=[],
+                unsupported_claims=[],
+                conflicts=[],
+                abstention_class=draft_response.abstention_class,
+                abstention_reason=draft_response.abstention_reason,
+            )
+        return VerificationResult(
+            status="pass" if draft_response.citations else "abstain",
+            supported_claims=[],
+            unsupported_claims=[] if draft_response.citations else ["missing_citations"],
+            conflicts=[],
+            abstention_class=None if draft_response.citations else "insufficient_evidence",
+            abstention_reason=None if draft_response.citations else "Draft answer does not include citations.",
+        )
+
+    def normalize_query(self, *, question: str, session_context: dict) -> NormalizedQuery | None:
+        if not self._client:
+            return self._stub_normalize_query(question=question, session_context=session_context)
         model = self.settings.gemini_query_model or self.settings.gemini_model
         prompt = f"""
-You are parsing a clinician's medical evidence query for an orchestration system.
+You are the first semantic step for a clinician-facing medical evidence system.
 
-Return a ParsedQuery object that:
-- rewrites the question into a cleaner search-oriented form
-- extracts medical entities
-- extracts clinical_modifiers for population constraints, comorbidities, immunologic status, resistance status, pregnancy/lactation, and care-setting qualifiers when present
-- detects if clarification is required
-- when the question is a follow-up, use the session context to resolve omitted condition, modifier, or medication context
-- sets information_needs using only these values:
-  - literature
-  - guidelines
-  - drug_safety
-  - trials
-- uses concise clarification questions only when needed for safety
-- when clarification is needed for common syndromic questions like pneumonia, explicitly ask for patient population and care setting
-- marks recency_required true when the user asks for latest, current, recent, or similar wording
-- set scope_assessment to out_of_scope for insurance, billing, prior authorization, coverage, or non-medical administrative questions
+Return a NormalizedQuery object.
+
+Goals:
+- clean up spelling, phrasing, and shorthand without changing medical intent
+- expand abbreviations or acronyms only when the intended meaning is highly likely from context
+- produce a cleaner search-oriented medical question
+- identify open-ended entities and constraints from the question and session context
+- decide whether the question is in scope for a medical evidence assistant
+- decide whether a clarification question is required before evidence gathering
+
+Important rules:
+- do not use fixed medical vocabularies or hardcoded modifier lists
+- entity and constraint categories should be concise free-text labels chosen from the question itself
+- preserve ambiguity when it is real; do not over-normalize uncertain shorthand
+- if this is a follow-up, use the session context to recover omitted clinical context
+- if the question is out of scope, mark scope.in_scope as false and explain briefly
+- if clarification is needed, set needs_clarification true and provide a concise clarification_question
+- recency_focus should be true only when the user explicitly asks for recent, current, latest, or ongoing evidence
 
 Session context:
 {session_context}
@@ -88,38 +303,188 @@ Session context:
 Question:
 {question}
 """.strip()
-        result = self._call_structured(model=model, prompt=prompt, schema_model=ParsedQuery)
-        return result if isinstance(result, ParsedQuery) else None
+        result = self._call_structured(model=model, prompt=prompt, schema_model=NormalizedQuery)
+        return result if isinstance(result, NormalizedQuery) else None
+
+    def plan_evidence(self, *, normalized_query: NormalizedQuery, session_context: dict) -> EvidencePlan | None:
+        if not self._client:
+            return self._stub_plan_evidence(normalized_query=normalized_query, session_context=session_context)
+        model = self.settings.gemini_planning_model or self.settings.gemini_model
+        prompt = f"""
+You are the evidence-planning step for a clinician-facing medical evidence system.
+
+Return an EvidencePlan object.
+
+Available retrieval lanes:
+- guideline
+- literature
+- trials
+- drug_safety
+
+Your job:
+- decide the primary goal for answering the question
+- break the question into subquestions only where it helps answer quality
+- choose only the retrieval lanes that materially help
+- generate retrieval_specs for each chosen lane
+- use source_query to produce the connector-facing query string for that lane
+- use query_text to describe the same retrieval goal in plain language
+
+Planning rules:
+- treatment questions should usually prioritize guideline and literature lanes before trial details
+- trial evidence should supplement rather than dominate unless the user explicitly asks about investigational or ongoing work
+- drug_safety should be used only when the question asks about risks, warnings, adverse effects, contraindications, interactions, or a specific medication
+- focus_terms should contain the most important entity and constraint phrases from the normalized query
+- retrieval specs must stay faithful to the normalized question and should not introduce new clinical assumptions
+- do not use hardcoded disease or modifier lists
+
+Session context:
+{session_context}
+
+Normalized query:
+{normalized_query.model_dump(mode="json")}
+""".strip()
+        result = self._call_structured(model=model, prompt=prompt, schema_model=EvidencePlan)
+        return result if isinstance(result, EvidencePlan) else None
+
+    def assess_evidence(
+        self,
+        *,
+        normalized_query: NormalizedQuery,
+        evidence_plan: EvidencePlan,
+        evidence_items: list[EvidenceItem],
+    ) -> EvidenceAssessmentResult | None:
+        if not self._client:
+            return self._stub_assess_evidence(
+                normalized_query=normalized_query,
+                evidence_plan=evidence_plan,
+                evidence_items=evidence_items,
+            )
+        model = self.settings.gemini_verifier_model or self.settings.gemini_model
+        prompt = f"""
+You are ranking and characterizing retrieved evidence for a clinician-facing evidence assistant.
+
+Return an EvidenceAssessmentResult object.
+
+For each evidence item:
+- assign an open-ended question_role phrase that describes how it should be used
+- assign an open-ended claim_type phrase
+- assign an open-ended applicability phrase that explains how directly it matches the question
+- fill supports_question_dimensions with short free-text dimensions or subquestions this evidence helps answer
+- assign semantic_relevance from 0 to 100
+- set include_in_answer true only if the evidence should materially shape the final answer
+- provide a concise assessment_summary
+
+Important rules:
+- do not use fixed disease vocabularies or hardcoded modifier logic
+- prefer direct evidence that answers the user question over broad background context
+- treatment questions should privilege evidence that states what should be done clinically
+- trial registry entries can be useful but should usually be treated as emerging evidence rather than standard-of-care evidence unless the user explicitly asks for trials
+- do not omit any evidence_id
+
+Normalized query:
+{normalized_query.model_dump(mode="json")}
+
+Evidence plan:
+{evidence_plan.model_dump(mode="json")}
+
+Evidence items:
+{[item.model_dump(mode='json') for item in evidence_items]}
+""".strip()
+        result = self._call_structured(model=model, prompt=prompt, schema_model=EvidenceAssessmentResult)
+        return result if isinstance(result, EvidenceAssessmentResult) else None
+
+    def assess_coverage(
+        self,
+        *,
+        normalized_query: NormalizedQuery,
+        evidence_plan: EvidencePlan,
+        evidence_items: list[EvidenceItem],
+        completed_lanes: list[str],
+        iteration: int,
+    ) -> EvidenceCoverageDecision | None:
+        if not self._client:
+            return self._stub_assess_coverage(
+                normalized_query=normalized_query,
+                evidence_plan=evidence_plan,
+                evidence_items=evidence_items,
+                completed_lanes=completed_lanes,
+                iteration=iteration,
+            )
+        model = self.settings.gemini_coverage_model or self.settings.gemini_model
+        prompt = f"""
+You are deciding whether a clinician-facing evidence workflow should do more retrieval work.
+
+Return an EvidenceCoverageDecision object.
+
+Your job:
+- decide whether the current evidence is enough to answer safely
+- decide whether more retrieval is needed
+- if more retrieval is needed, propose follow_up_specs using the same retrieval lane model as EvidencePlan
+- explain remaining gaps in free text
+
+Important rules:
+- use only available lanes: guideline, literature, trials, drug_safety
+- do not create follow-up work unless it would materially improve answer quality
+- treatment questions should not drift into speculative trial details unless those details are genuinely useful
+- do not use hardcoded disease or modifier lists
+- respect the current iteration and keep the follow-up set focused
+
+Normalized query:
+{normalized_query.model_dump(mode="json")}
+
+Evidence plan:
+{evidence_plan.model_dump(mode="json")}
+
+Completed lanes:
+{completed_lanes}
+
+Iteration:
+{iteration}
+
+Evidence items:
+{[item.model_dump(mode='json') for item in evidence_items]}
+""".strip()
+        result = self._call_structured(model=model, prompt=prompt, schema_model=EvidenceCoverageDecision)
+        return result if isinstance(result, EvidenceCoverageDecision) else None
 
     def synthesize_answer(
         self,
         *,
-        parsed_query: ParsedQuery,
+        normalized_query: NormalizedQuery,
+        evidence_plan: EvidencePlan,
         evidence_items: list[EvidenceItem],
         citations: list[Citation],
     ) -> SynthesisDraft | None:
+        if not self._client:
+            if not evidence_items:
+                return None
+            lead = evidence_items[0]
+            return SynthesisDraft(
+                answer=lead.key_claim,
+                evidence_summary=[item.key_claim for item in evidence_items[:3]],
+                evidence_strength="moderate" if any(item.evidence_strength in {"high", "moderate"} for item in evidence_items) else "low",
+                limitations=["Local stub synthesis is active; production-quality phrasing requires Gemini."],
+            )
         model = self.settings.gemini_synthesis_model or self.settings.gemini_model
         prompt = f"""
-You are drafting a cautious medical evidence summary.
+You are drafting a clinician-facing answer from grounded evidence.
+
+Return a SynthesisDraft object.
 
 Requirements:
-- Use only the supplied evidence.
-- Do not invent facts.
-- Be explicit about uncertainty.
-- Keep the answer concise and clinician-facing.
-- Do not include citation labels inside the answer; citations are attached separately.
-- Prefer guideline-backed or review-backed conclusions over single studies when they conflict.
-- If evidence is indirect for the requested population, say so explicitly.
-- Do not mention a drug, regimen, warning, study result, or comparison unless it appears in the supplied evidence items.
-- If the evidence only supports a narrow answer, answer narrowly rather than generalizing.
-- Start by answering the user's core question directly in the first sentence.
-- For treatment questions, state the current treatment position before giving caveats or uncertainty.
-- If the evidence mainly addresses a narrower subtype than the user asked about, say that explicitly instead of silently generalizing.
-- Separate treatment position, safety considerations, and uncertainty clearly.
+- use only the supplied evidence items
+- answer the user's core question directly in the first sentence
+- do not invent facts, drugs, regimens, or study findings
+- do not introduce medical assumptions that are not present in the evidence
+- separate the direct answer from caveats and uncertainty
+- if emerging trial evidence is included, present it as supplementary context rather than the main answer unless the user explicitly asked for trials
 - evidence_strength must be one of: high, moderate, low, unknown
 
-Parsed query:
-{parsed_query.model_dump(mode="json")}
+Normalized query:
+{normalized_query.model_dump(mode="json")}
+
+Evidence plan:
+{evidence_plan.model_dump(mode="json")}
 
 Evidence items:
 {[item.model_dump(mode='json') for item in evidence_items]}
@@ -130,76 +495,40 @@ Available citations:
         result = self._call_structured(model=model, prompt=prompt, schema_model=SynthesisDraft)
         return result if isinstance(result, SynthesisDraft) else None
 
-    def assess_evidence(
-        self,
-        *,
-        parsed_query: ParsedQuery,
-        evidence_items: list[EvidenceItem],
-    ) -> EvidenceAssessmentResult | None:
-        model = self.settings.gemini_verifier_model or self.settings.gemini_model
-        prompt = f"""
-You are ranking retrieved medical evidence for a clinician-facing evidence assistant.
-
-For each supplied evidence item:
-- assign question_role using only:
-  - treatment
-  - safety
-  - trial_status
-  - background
-  - uncertainty
-  - exclude
-- assign semantic_relevance from 0 to 100
-
-Guidance:
-- Use treatment when the source directly helps answer what to do clinically.
-- Use safety when the source mainly informs adverse effects, warnings, contraindications, or toxicity.
-- Use trial_status when the source mainly informs ongoing or emerging trial evidence.
-- Use uncertainty when the source is relevant mainly because it limits or qualifies the answer.
-- Use background for context that is relevant but should not drive the lead answer.
-- Use exclude for weakly related or off-target evidence that should not shape the answer.
-- Prefer direct population/modifier matches over indirect evidence.
-- Prefer evidence that directly addresses the asked clinical condition and question intent.
-- Do not omit any evidence_id from the result.
-
-Parsed query:
-{parsed_query.model_dump(mode="json")}
-
-Evidence items:
-{[item.model_dump(mode='json') for item in evidence_items]}
-""".strip()
-        result = self._call_structured(model=model, prompt=prompt, schema_model=EvidenceAssessmentResult)
-        return result if isinstance(result, EvidenceAssessmentResult) else None
-
     def verify_answer(
         self,
         *,
-        parsed_query: ParsedQuery,
+        normalized_query: NormalizedQuery,
+        evidence_plan: EvidencePlan,
         draft_response: AssistantResponse,
         evidence_items: list[EvidenceItem],
     ) -> VerificationResult | None:
+        if not self._client:
+            return self._stub_verify_answer(draft_response=draft_response)
         model = self.settings.gemini_verifier_model or self.settings.gemini_model
         prompt = f"""
-You are a verification step for a medical evidence assistant.
+You are the verification gate for a clinician-facing evidence assistant.
 
-Decide whether the answer should pass, request clarification, or abstain.
-Use only these statuses:
+Return a VerificationResult object.
+
+Allowed statuses:
 - pass
 - clarify
 - abstain
 
-Use only these abstention classes when applicable:
-- insufficient_evidence
-- conflicting_evidence
-- missing_clinical_context
-- coverage_gap
-- recency_gap
-- ambiguous_query
+Verification rules:
+- verify that the draft answer stays within the evidence
+- prefer narrow grounded answers over broad speculative ones
+- mark unsupported claims explicitly
+- use clarify when the answer needs more clinical context from the user
+- use abstain when the evidence is too weak, too conflicting, or too indirect to support a safe answer
+- conflicts should be stated in concise free text
 
-Check whether the draft answer is adequately supported by the evidence items and whether the question required more context.
-- Pay particular attention to population mismatch, recency-sensitive questions, and safety questions answered without direct safety evidence.
+Normalized query:
+{normalized_query.model_dump(mode="json")}
 
-Parsed query:
-{parsed_query.model_dump(mode="json")}
+Evidence plan:
+{evidence_plan.model_dump(mode="json")}
 
 Draft response:
 {draft_response.model_dump(mode="json")}

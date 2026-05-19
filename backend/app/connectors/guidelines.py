@@ -6,7 +6,7 @@ from pathlib import Path
 
 from app.connectors.base import BaseConnector
 from app.core.config import Settings, get_settings
-from app.schemas.common import ParsedQuery, SourceDocument, SpecialistTask
+from app.schemas.common import NormalizedQuery, SourceDocument, SpecialistTask
 
 
 class GuidelineFixtureConnector(BaseConnector):
@@ -22,9 +22,9 @@ class GuidelineFixtureConnector(BaseConnector):
             payload = json.load(handle)
         return list(payload.get("guidelines", []))
 
-    async def search(self, parsed_query: ParsedQuery, task: SpecialistTask) -> list[SourceDocument]:
+    async def search(self, normalized_query: NormalizedQuery, task: SpecialistTask) -> list[SourceDocument]:
         haystack = " ".join(
-            [parsed_query.original_question, parsed_query.rewritten_question, *task.focus_entities]
+            [normalized_query.raw_question, normalized_query.normalized_question, task.query_text, task.source_query, *task.focus_terms]
         ).lower()
         ranked_documents: list[tuple[int, SourceDocument]] = []
         for record in self._records:

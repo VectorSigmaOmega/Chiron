@@ -360,12 +360,12 @@ Each user turn creates one `Run`.
 Run phases:
 
 1. ingest user turn and session context
-2. parse question
+2. normalize query
 3. clarify if required
-4. plan specialist tasks
+4. plan evidence gathering
 5. execute independent tasks in parallel
 6. aggregate evidence
-7. detect gaps, conflicts, or new entities
+7. assess evidence coverage
 8. optionally schedule follow-up specialist tasks
 9. stop when answerable or abstainable
 10. synthesize
@@ -388,12 +388,11 @@ This allows the system to demonstrate clarification, orchestration, synthesis, v
 Recommended initial nodes:
 
 - `load_session_context`
-- `parse_query`
-- `clarify_or_plan`
+- `normalize_query`
+- `plan_evidence`
 - `dispatch_specialists`
 - `aggregate_evidence`
-- `assess_gaps`
-- `replan_or_continue`
+- `assess_coverage`
 - `synthesize_answer`
 - `verify_answer`
 - `finalize_response`
@@ -405,11 +404,13 @@ The LangGraph state object should contain:
 - session identifiers
 - current user message
 - compact session context
-- parsed query
+- normalized query
+- evidence plan
 - pending specialist tasks
 - completed task results
 - normalized evidence items
 - unresolved gaps
+- coverage decision
 - draft answer
 - verification result
 - final assistant response
@@ -434,7 +435,7 @@ Example:
 In LangGraph terms:
 
 - independent first-pass specialist tasks can be emitted from the same planning state
-- follow-up tasks should be scheduled only after `assess_gaps` detects missing safety, trial, or population-specific evidence
+- follow-up tasks should be scheduled only after `assess_coverage` decides the current evidence set still has material gaps
 
 ### 10.3 Stop Conditions
 
@@ -468,38 +469,68 @@ The MVP does not need full arbitrary graph resume across all nodes. It only need
 
 All model-facing and connector-facing data should use explicit Pydantic models.
 
-### 11.1 Parsed Query
+### 11.1 Normalized Query
 
 ```python
-class ParsedQuery(BaseModel):
-    original_question: str
-    rewritten_question: str
-    entities: list[EntityRef]
-    population: str | None
-    setting: str | None
-    pregnancy_status: str | None
-    comorbidities: list[str]
-    medications: list[str]
-    recency_required: bool
-    missing_dimensions: list[str]
+class NormalizedQuery(BaseModel):
+    raw_question: str
+    normalized_question: str
+    intent_summary: str
+    scope: ScopeDecision
     needs_clarification: bool
     clarification_question: str | None
-    information_needs: list[InformationNeed]
+    ambiguity_notes: list[str]
+    entities: list[QueryEntity]
+    constraints: list[QueryConstraint]
+    recency_focus: bool
+    session_context_used: bool
+    normalization_notes: list[NormalizationNote]
 ```
 
-### 11.2 Specialist Task
+### 11.2 Evidence Plan
+
+```python
+class EvidencePlan(BaseModel):
+    normalized_question: str
+    primary_goal: str
+    answer_strategy: str
+    subquestions: list[PlannedSubquestion]
+    retrieval_specs: list[RetrievalSpec]
+```
+
+### 11.3 Retrieval Spec
+
+```python
+class RetrievalSpec(BaseModel):
+    spec_id: str
+    lane: Literal["guideline", "literature", "drug_safety", "trials"]
+    objective: str
+    rationale: str
+    query_text: str
+    source_query: str
+    focus_terms: list[str]
+    desired_result_count: int
+    priority: str
+    depends_on: list[str]
+```
+
+### 11.4 Specialist Task
 
 ```python
 class SpecialistTask(BaseModel):
     task_id: str
     agent_type: Literal["guideline", "literature", "drug_safety", "trials"]
-    goal: str
-    subquery: str
+    objective: str
+    query_text: str
+    source_query: str
+    rationale: str | None
+    focus_terms: list[str]
+    priority: str
+    desired_result_count: int
     depends_on: list[str]
-    focus_entities: list[str]
 ```
 
-### 11.3 Source Document
+### 11.5 Source Document
 
 ```python
 class SourceDocument(BaseModel):
@@ -514,7 +545,7 @@ class SourceDocument(BaseModel):
     metadata: dict[str, Any]
 ```
 
-### 11.4 Evidence Item
+### 11.6 Evidence Item
 
 ```python
 class EvidenceItem(BaseModel):
@@ -528,13 +559,33 @@ class EvidenceItem(BaseModel):
     intervention: str | None
     outcome: str | None
     key_claim: str
+    claim_type: str | None
+    applicability: str | None
+    supports_question_dimensions: list[str]
     safety_notes: list[str]
     limitations: list[str]
+    uncertainty_notes: list[str]
     evidence_strength: Literal["high", "moderate", "low", "unknown"]
+    source_priority: int
     extracted_entities: list[str]
+    question_role: str | None
+    semantic_relevance: int | None
+    include_in_answer: bool | None
+    assessment_summary: str | None
 ```
 
-### 11.5 Assistant Response
+### 11.7 Evidence Coverage Decision
+
+```python
+class EvidenceCoverageDecision(BaseModel):
+    answerable_now: bool
+    needs_follow_up: bool
+    rationale: str
+    remaining_gaps: list[str]
+    follow_up_specs: list[RetrievalSpec]
+```
+
+### 11.8 Assistant Response
 
 ```python
 class AssistantResponse(BaseModel):
@@ -550,7 +601,7 @@ class AssistantResponse(BaseModel):
     last_literature_check_at: datetime | None
 ```
 
-### 11.6 Verification Result
+### 11.9 Verification Result
 
 ```python
 class VerificationResult(BaseModel):

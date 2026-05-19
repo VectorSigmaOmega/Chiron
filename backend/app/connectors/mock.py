@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date
 
 from app.connectors.base import BaseConnector
-from app.schemas.common import ParsedQuery, SourceDocument, SpecialistTask
+from app.schemas.common import NormalizedQuery, SourceDocument, SpecialistTask
 
 
 def _contains_any(text: str, needles: list[str]) -> bool:
@@ -14,8 +14,8 @@ def _contains_any(text: str, needles: list[str]) -> bool:
 class MockGuidelineConnector(BaseConnector):
     connector_name = "mock_guideline"
 
-    async def search(self, parsed_query: ParsedQuery, task: SpecialistTask) -> list[SourceDocument]:
-        question = parsed_query.original_question.lower()
+    async def search(self, normalized_query: NormalizedQuery, task: SpecialistTask) -> list[SourceDocument]:
+        question = normalized_query.normalized_question.lower()
         if _contains_any(question, ["drug-resistant", "mdr-tb", "rr-tb"]):
             return [
                 SourceDocument(
@@ -64,8 +64,8 @@ class MockGuidelineConnector(BaseConnector):
 class MockLiteratureConnector(BaseConnector):
     connector_name = "mock_literature"
 
-    async def search(self, parsed_query: ParsedQuery, task: SpecialistTask) -> list[SourceDocument]:
-        question = parsed_query.original_question.lower()
+    async def search(self, normalized_query: NormalizedQuery, task: SpecialistTask) -> list[SourceDocument]:
+        question = normalized_query.normalized_question.lower()
         if _contains_any(question, ["drug-resistant", "mdr-tb", "rr-tb"]):
             return [
                 SourceDocument(
@@ -118,15 +118,13 @@ class MockLiteratureConnector(BaseConnector):
 class MockDrugSafetyConnector(BaseConnector):
     connector_name = "mock_drug_safety"
 
-    async def search(self, parsed_query: ParsedQuery, task: SpecialistTask) -> list[SourceDocument]:
-        lowered_entities = {entity.name.lower() for entity in parsed_query.entities}
-        lowered_medications = {medication.lower() for medication in parsed_query.medications}
-        focus = " ".join(task.focus_entities).lower()
+    async def search(self, normalized_query: NormalizedQuery, task: SpecialistTask) -> list[SourceDocument]:
+        lowered_entities = {entity.normalized_text.lower() for entity in normalized_query.entities}
+        focus = " ".join(task.focus_terms).lower()
         if (
             "bedaquiline" in focus
             or "bedaquiline" in lowered_entities
-            or "bedaquiline" in lowered_medications
-            or "tb" in parsed_query.original_question.lower()
+            or "tb" in normalized_query.normalized_question.lower()
         ):
             return [
                 SourceDocument(
@@ -149,8 +147,8 @@ class MockDrugSafetyConnector(BaseConnector):
 class MockTrialsConnector(BaseConnector):
     connector_name = "mock_trials"
 
-    async def search(self, parsed_query: ParsedQuery, task: SpecialistTask) -> list[SourceDocument]:
-        question = parsed_query.original_question.lower()
+    async def search(self, normalized_query: NormalizedQuery, task: SpecialistTask) -> list[SourceDocument]:
+        question = normalized_query.normalized_question.lower()
         if "tuberculosis" in question or "tb" in question:
             return [
                 SourceDocument(

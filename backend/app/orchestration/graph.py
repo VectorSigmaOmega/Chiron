@@ -5,12 +5,12 @@ from langgraph.graph import END, START, StateGraph
 from app.agents.specialists import RetrievalSpecialist
 from app.orchestration.nodes import (
     aggregate_evidence,
-    assess_gaps,
-    clarify_or_plan,
+    assess_coverage,
     dispatch_specialists,
     finalize_response,
     load_session_context,
-    parse_query,
+    normalize_query,
+    plan_evidence,
     should_replan,
     synthesize_answer,
     verify_answer,
@@ -25,20 +25,20 @@ def build_graph(specialists: dict[str, RetrievalSpecialist]):
         return await dispatch_specialists(state, specialists)
 
     graph.add_node("load_session_context", load_session_context)
-    graph.add_node("parse_query", parse_query)
-    graph.add_node("clarify_or_plan", clarify_or_plan)
+    graph.add_node("normalize_query", normalize_query)
+    graph.add_node("plan_evidence", plan_evidence)
     graph.add_node("dispatch_specialists", dispatch_node)
     graph.add_node("aggregate_evidence", aggregate_evidence)
-    graph.add_node("assess_gaps", assess_gaps)
+    graph.add_node("assess_coverage", assess_coverage)
     graph.add_node("synthesize_answer", synthesize_answer)
     graph.add_node("verify_answer", verify_answer)
     graph.add_node("finalize_response", finalize_response)
 
     graph.add_edge(START, "load_session_context")
-    graph.add_edge("load_session_context", "parse_query")
-    graph.add_edge("parse_query", "clarify_or_plan")
+    graph.add_edge("load_session_context", "normalize_query")
+    graph.add_edge("normalize_query", "plan_evidence")
     graph.add_conditional_edges(
-        "clarify_or_plan",
+        "plan_evidence",
         lambda state: "finalize_response" if state.get("final_response") else "dispatch_specialists",
         {
             "dispatch_specialists": "dispatch_specialists",
@@ -46,9 +46,9 @@ def build_graph(specialists: dict[str, RetrievalSpecialist]):
         },
     )
     graph.add_edge("dispatch_specialists", "aggregate_evidence")
-    graph.add_edge("aggregate_evidence", "assess_gaps")
+    graph.add_edge("aggregate_evidence", "assess_coverage")
     graph.add_conditional_edges(
-        "assess_gaps",
+        "assess_coverage",
         should_replan,
         {
             "dispatch_specialists": "dispatch_specialists",

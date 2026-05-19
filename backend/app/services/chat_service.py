@@ -21,7 +21,7 @@ from app.connectors.mock import (
 from app.core.db import SessionLocal
 from app.orchestration.graph import build_graph
 from app.persistence.models import ChatSession, Run, RunStep
-from app.schemas.common import AssistantResponse, EntityRef, EvidenceItem, ParsedQuery
+from app.schemas.common import AssistantResponse, EvidenceItem, NormalizedQuery, QueryConstraint, QueryEntity
 from app.schemas.session import MessageCreateRequest
 from app.services import session_service
 from app.services.progress_service import get_progress_service
@@ -66,43 +66,35 @@ def _merge_unique_str(left: list[str], right: list[str]) -> list[str]:
 
 
 def _build_session_context(previous_context: dict, result: dict, final_response: AssistantResponse) -> dict:
-    parsed_query = ParsedQuery.model_validate(result.get("parsed_query", {}))
+    normalized_query = NormalizedQuery.model_validate(result.get("normalized_query", {}))
     evidence_items = [EvidenceItem.model_validate(item) for item in result.get("evidence_items", [])]
-    previous_entities = [EntityRef.model_validate(item) for item in previous_context.get("active_entities", [])]
+    previous_entities = [QueryEntity.model_validate(item) for item in previous_context.get("active_entities", [])]
+    previous_constraints = [QueryConstraint.model_validate(item) for item in previous_context.get("active_constraints", [])]
 
-    current_entities = parsed_query.entities or previous_entities
-    medications = _merge_unique_str(
-        list(previous_context.get("medications", [])),
-        _merge_unique_str(
-            parsed_query.medications,
-            [entity.name for entity in parsed_query.entities if entity.kind.lower() == "drug"]
-            + [drug for item in evidence_items for drug in item.extracted_entities],
-        ),
+    current_entities = normalized_query.entities or previous_entities
+    current_constraints = normalized_query.constraints or previous_constraints
+    active_terms = _merge_unique_str(
+        list(previous_context.get("active_terms", [])),
+        [
+            term
+            for term in (
+                [entity.normalized_text for entity in current_entities]
+                + [constraint.normalized_text or constraint.text for constraint in current_constraints]
+                + [term for item in evidence_items for term in item.extracted_entities]
+            )
+            if term
+        ],
     )
 
     return {
         "active_entities": [entity.model_dump(mode="json") for entity in current_entities],
-        "clinical_modifiers": _merge_unique_str(
-            list(previous_context.get("clinical_modifiers", [])),
-            parsed_query.clinical_modifiers,
-        ),
-        "comorbidities": _merge_unique_str(
-            list(previous_context.get("comorbidities", [])),
-            parsed_query.comorbidities,
-        ),
-        "medications": medications,
-        "population": parsed_query.population or previous_context.get("population"),
-        "setting": parsed_query.setting or previous_context.get("setting"),
-        "last_question": parsed_query.original_question,
+        "active_constraints": [constraint.model_dump(mode="json") for constraint in current_constraints],
+        "active_terms": active_terms,
+        "last_question": normalized_query.raw_question,
+        "last_normalized_question": normalized_query.normalized_question,
+        "last_intent_summary": normalized_query.intent_summary,
         "last_answer_status": final_response.status,
-        "last_question_roles": list(
-            dict.fromkeys(
-                [
-                    (item.question_role or item.claim_type or "background")
-                    for item in evidence_items[:4]
-                ]
-            )
-        ),
+        "last_question_roles": list(dict.fromkeys([(item.question_role or item.claim_type or "supporting evidence") for item in evidence_items[:4]])),
     }
 
 
@@ -123,6 +115,7 @@ def _build_run_state(
         "iteration": 0,
         "step_trace": [],
         "completed_tasks": [],
+        "evidence_plan": {},
         "sources": [],
         "evidence_items": [],
         "unresolved_gaps": [],

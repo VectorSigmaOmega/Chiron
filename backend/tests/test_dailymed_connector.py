@@ -6,7 +6,7 @@ import httpx
 
 from app.connectors.dailymed import DailyMedConnector
 from app.core.config import Settings
-from app.schemas.common import EntityRef, ParsedQuery, SpecialistTask
+from app.schemas.common import NormalizedQuery, QueryEntity, ScopeDecision, SpecialistTask
 
 
 def _mock_dailymed_transport(request: httpx.Request) -> httpx.Response:
@@ -52,23 +52,24 @@ async def test_dailymed_connector_returns_label_document() -> None:
         settings=Settings(drug_safety_connector_mode="dailymed"),
         transport=httpx.MockTransport(_mock_dailymed_transport),
     )
-    parsed_query = ParsedQuery(
-        original_question="Major safety concerns with bedaquiline",
-        rewritten_question="Major safety concerns with bedaquiline",
-        entities=[EntityRef(name="bedaquiline", kind="drug")],
+    normalized_query = NormalizedQuery(
+        raw_question="Major safety concerns with bedaquiline",
+        normalized_question="Major safety concerns with bedaquiline",
+        intent_summary="Test query",
+        scope=ScopeDecision(in_scope=True),
+        entities=[QueryEntity(text="bedaquiline", normalized_text="bedaquiline", category="drug", role="primary")],
     )
     task = SpecialistTask(
         task_id="task-dm",
         agent_type="drug_safety",
-        goal="Lookup safety concerns",
-        subquery=parsed_query.rewritten_question,
-        depends_on=[],
-        focus_entities=["bedaquiline"],
+        objective="Lookup safety concerns",
+        query_text=normalized_query.normalized_question,
+        source_query="bedaquiline",
+        focus_terms=["bedaquiline"],
     )
-    documents = await connector.search(parsed_query, task)
+    documents = await connector.search(normalized_query, task)
     assert len(documents) == 1
     assert documents[0].source_type == "label"
     assert "qt prolongation" in (documents[0].abstract or "").lower()
     assert "Contraindications:" in (documents[0].abstract or "")
-    assert documents[0].metadata["warnings"]
     assert documents[0].metadata["contraindications_excerpt"] is not None

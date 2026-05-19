@@ -8,7 +8,7 @@ import httpx
 
 from app.connectors.base import BaseConnector
 from app.core.config import Settings, get_settings
-from app.schemas.common import ParsedQuery, SourceDocument, SpecialistTask
+from app.schemas.common import NormalizedQuery, SourceDocument, SpecialistTask
 
 
 def _parse_iso_date(value: str | None) -> date | None:
@@ -60,34 +60,6 @@ def _extract_eligibility_snapshot(eligibility_module: dict[str, Any]) -> dict[st
     }
 
 
-def _infer_population(parsed_query: ParsedQuery, conditions: list[str], summary: str | None) -> str | None:
-    haystack = " ".join(
-        [
-            *conditions,
-            summary or "",
-            parsed_query.population or "",
-            parsed_query.pregnancy_status or "",
-            " ".join(parsed_query.clinical_modifiers),
-            " ".join(parsed_query.comorbidities),
-        ]
-    ).lower()
-    if "pregnan" in haystack or "maternal" in haystack:
-        return "pregnant patients"
-    if "hiv" in haystack or "aids" in haystack:
-        return "patients with HIV/AIDS"
-    if "diabet" in haystack:
-        return "patients with diabetes"
-    if "renal" in haystack or "kidney" in haystack or "ckd" in haystack:
-        return "patients with renal impairment"
-    if "hepatic" in haystack or "liver" in haystack or "cirrhosis" in haystack:
-        return "patients with hepatic impairment"
-    if "immunocompromised" in haystack or "immunosuppressed" in haystack:
-        return "immunocompromised patients"
-    if parsed_query.population:
-        return parsed_query.population
-    return None
-
-
 def _build_trial_summary(
     *,
     title: str,
@@ -127,25 +99,12 @@ class ClinicalTrialsConnector(BaseConnector):
         self.settings = settings or get_settings()
         self.transport = transport
 
-    @staticmethod
-    def _condition_term(parsed_query: ParsedQuery, task: SpecialistTask) -> str | None:
-        for entity in task.focus_entities:
-            lowered = entity.lower()
-            if any(token in lowered for token in ["tuberculosis", "pneumonia", "sepsis", "cancer"]):
-                return entity
-        for entity in parsed_query.entities:
-            if entity.kind == "condition":
-                return entity.name
-        return None
-
-    async def search(self, parsed_query: ParsedQuery, task: SpecialistTask) -> list[SourceDocument]:
+    async def search(self, normalized_query: NormalizedQuery, task: SpecialistTask) -> list[SourceDocument]:
         timeout = httpx.Timeout(20.0, connect=10.0)
-        params = {"pageSize": str(self.settings.clinicaltrials_page_size)}
-        condition_term = self._condition_term(parsed_query, task)
-        if condition_term:
-            params["query.cond"] = condition_term
-        else:
-            params["query.term"] = task.subquery or parsed_query.rewritten_question
+        params = {
+            "pageSize": str(min(task.desired_result_count, self.settings.clinicaltrials_page_size)),
+            "query.term": task.source_query or task.query_text or normalized_query.normalized_question,
+        }
         async with httpx.AsyncClient(
             base_url=self.settings.clinicaltrials_base_url,
             timeout=timeout,
@@ -178,7 +137,6 @@ class ClinicalTrialsConnector(BaseConnector):
                 or identification.get("officialTitle")
                 or f"Clinical trial {nct_id}"
             )
-            population = _infer_population(parsed_query, condition_list, brief_summary)
             documents.append(
                 SourceDocument(
                     source_id=nct_id,
@@ -206,7 +164,7 @@ class ClinicalTrialsConnector(BaseConnector):
                         "conditions": condition_list,
                         "interventions": interventions,
                         "candidate_drugs": interventions,
-                        "population": population,
+                        "population": eligibility_snapshot.get("criteria_excerpt"),
                         "eligibility": eligibility_snapshot,
                     },
                 )

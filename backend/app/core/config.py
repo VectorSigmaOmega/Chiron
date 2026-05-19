@@ -19,12 +19,14 @@ class Settings(BaseSettings):
         description="Async database URL. Defaults to local SQLite for zero-manual-setup bootstrapping.",
     )
     llm_mode: str = Field(
-        default="heuristic",
-        description="heuristic or gemini. Heuristic mode keeps the scaffold runnable without API keys.",
+        default="stub",
+        description="stub or gemini. Stub mode provides deterministic local test doubles; gemini enables the semantic layer.",
     )
     gemini_api_key: str | None = None
     gemini_model: str = "gemini-3-flash-preview"
     gemini_query_model: str | None = None
+    gemini_planning_model: str | None = None
+    gemini_coverage_model: str | None = None
     gemini_synthesis_model: str | None = None
     gemini_verifier_model: str | None = None
     literature_connector_mode: str = Field(

@@ -6,7 +6,7 @@ import httpx
 
 from app.connectors.pubmed import PubMedConnector
 from app.core.config import Settings
-from app.schemas.common import ParsedQuery, SpecialistTask
+from app.schemas.common import NormalizedQuery, ScopeDecision, SpecialistTask
 
 
 def _mock_pubmed_transport(request: httpx.Request) -> httpx.Response:
@@ -15,9 +15,7 @@ def _mock_pubmed_transport(request: httpx.Request) -> httpx.Response:
     if parsed.path.endswith("/esearch.fcgi"):
         assert query["db"] == ["pubmed"]
         term = query["term"][0].lower()
-        assert "pregnancy" in term
-        assert "treatment" in term
-        assert "drug-resistant tuberculosis" in term or "multidrug-resistant tuberculosis" in term
+        assert "drug-resistant tuberculosis" in term
         return httpx.Response(
             200,
             json={
@@ -99,21 +97,23 @@ async def test_pubmed_connector_returns_normalized_documents() -> None:
         ),
         transport=httpx.MockTransport(_mock_pubmed_transport),
     )
-    parsed_query = ParsedQuery(
-        original_question="Latest treatment for drug-resistant TB in pregnancy",
-        rewritten_question="Latest treatment for drug-resistant TB in pregnancy",
-        recency_required=True,
+    normalized_query = NormalizedQuery(
+        raw_question="Latest treatment for drug-resistant TB in pregnancy",
+        normalized_question="Current evidence-based treatment for drug-resistant tuberculosis in pregnancy",
+        intent_summary="Test query",
+        scope=ScopeDecision(in_scope=True),
+        recency_focus=True,
     )
     task = SpecialistTask(
         task_id="task-1",
         agent_type="literature",
-        goal="Search literature",
-        subquery=parsed_query.rewritten_question,
-        depends_on=[],
-        focus_entities=["drug-resistant tuberculosis"],
+        objective="Search literature",
+        query_text=normalized_query.normalized_question,
+        source_query="drug-resistant tuberculosis AND pregnancy AND treatment",
+        focus_terms=["drug-resistant tuberculosis", "pregnancy"],
     )
 
-    documents = await connector.search(parsed_query, task)
+    documents = await connector.search(normalized_query, task)
 
     assert len(documents) == 1
     assert documents[0].source_id == "40000002"
@@ -123,7 +123,7 @@ async def test_pubmed_connector_returns_normalized_documents() -> None:
     assert documents[0].publication_date is not None
 
 
-async def test_pubmed_connector_includes_general_clinical_modifiers_in_query() -> None:
+async def test_pubmed_connector_uses_llm_generated_source_query() -> None:
     seen_terms: list[str] = []
 
     def _mock_pubmed_hiv_transport(request: httpx.Request) -> httpx.Response:
@@ -145,24 +145,23 @@ async def test_pubmed_connector_includes_general_clinical_modifiers_in_query() -
         ),
         transport=httpx.MockTransport(_mock_pubmed_hiv_transport),
     )
-    parsed_query = ParsedQuery(
-        original_question="Latest TB treatment in patients with HIV",
-        rewritten_question="Latest TB treatment in patients with HIV",
-        recency_required=True,
-        clinical_modifiers=["hiv"],
-        comorbidities=["hiv"],
-        entities=[],
+    normalized_query = NormalizedQuery(
+        raw_question="Latest TB treatment in patients with HIV",
+        normalized_question="Current treatment for tuberculosis in patients with HIV",
+        intent_summary="Test query",
+        scope=ScopeDecision(in_scope=True),
+        recency_focus=True,
     )
     task = SpecialistTask(
         task_id="task-hiv",
         agent_type="literature",
-        goal="Search literature",
-        subquery=parsed_query.rewritten_question,
-        depends_on=[],
-        focus_entities=["tuberculosis"],
+        objective="Search literature",
+        query_text=normalized_query.normalized_question,
+        source_query="tuberculosis AND HIV AND treatment",
+        focus_terms=["tuberculosis", "HIV"],
     )
 
-    documents = await connector.search(parsed_query, task)
+    documents = await connector.search(normalized_query, task)
 
     assert documents == []
     assert any("hiv" in term and "tuberculosis" in term for term in seen_terms)

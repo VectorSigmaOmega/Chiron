@@ -16,14 +16,72 @@ class Citation(BaseModel):
     snippet: str | None = None
 
 
-class EntityRef(BaseModel):
-    name: str
-    kind: str = "medical_concept"
+class QueryEntity(BaseModel):
+    text: str
+    normalized_text: str
+    category: str
+    role: str | None = None
+    salience: str | None = None
 
 
-class InformationNeed(BaseModel):
-    name: str
-    reason: str
+class QueryConstraint(BaseModel):
+    text: str
+    normalized_text: str | None = None
+    category: str
+    importance: str = "primary"
+
+
+class ScopeDecision(BaseModel):
+    in_scope: bool = True
+    reason: str | None = None
+
+
+class NormalizationNote(BaseModel):
+    original_text: str
+    normalized_text: str
+    reason: str | None = None
+
+
+class NormalizedQuery(BaseModel):
+    raw_question: str
+    normalized_question: str
+    intent_summary: str
+    scope: ScopeDecision = Field(default_factory=ScopeDecision)
+    needs_clarification: bool = False
+    clarification_question: str | None = None
+    ambiguity_notes: list[str] = Field(default_factory=list)
+    entities: list[QueryEntity] = Field(default_factory=list)
+    constraints: list[QueryConstraint] = Field(default_factory=list)
+    recency_focus: bool = False
+    session_context_used: bool = False
+    normalization_notes: list[NormalizationNote] = Field(default_factory=list)
+
+
+class PlannedSubquestion(BaseModel):
+    question: str
+    priority: str = "medium"
+    success_criteria: str | None = None
+
+
+class RetrievalSpec(BaseModel):
+    spec_id: str
+    lane: str
+    objective: str
+    rationale: str
+    query_text: str
+    source_query: str
+    focus_terms: list[str] = Field(default_factory=list)
+    desired_result_count: int = 5
+    priority: str = "medium"
+    depends_on: list[str] = Field(default_factory=list)
+
+
+class EvidencePlan(BaseModel):
+    normalized_question: str
+    primary_goal: str
+    answer_strategy: str
+    subquestions: list[PlannedSubquestion] = Field(default_factory=list)
+    retrieval_specs: list[RetrievalSpec] = Field(default_factory=list)
 
 
 class SourceDocument(BaseModel):
@@ -61,34 +119,29 @@ class EvidenceItem(BaseModel):
     extracted_entities: list[str] = Field(default_factory=list)
     question_role: str | None = None
     semantic_relevance: int | None = None
-
-
-class ParsedQuery(BaseModel):
-    original_question: str
-    rewritten_question: str
-    entities: list[EntityRef] = Field(default_factory=list)
-    population: str | None = None
-    setting: str | None = None
-    pregnancy_status: str | None = None
-    clinical_modifiers: list[str] = Field(default_factory=list)
-    comorbidities: list[str] = Field(default_factory=list)
-    medications: list[str] = Field(default_factory=list)
-    recency_required: bool = False
-    missing_dimensions: list[str] = Field(default_factory=list)
-    needs_clarification: bool = False
-    clarification_question: str | None = None
-    information_needs: list[InformationNeed] = Field(default_factory=list)
-    scope_assessment: str = "in_scope"
-    scope_reason: str | None = None
+    include_in_answer: bool | None = None
+    assessment_summary: str | None = None
 
 
 class SpecialistTask(BaseModel):
     task_id: str
     agent_type: str
-    goal: str
-    subquery: str
+    objective: str
+    query_text: str
+    source_query: str
+    rationale: str | None = None
+    focus_terms: list[str] = Field(default_factory=list)
+    priority: str = "medium"
+    desired_result_count: int = 5
     depends_on: list[str] = Field(default_factory=list)
-    focus_entities: list[str] = Field(default_factory=list)
+
+
+class EvidenceCoverageDecision(BaseModel):
+    answerable_now: bool
+    needs_follow_up: bool = False
+    rationale: str
+    remaining_gaps: list[str] = Field(default_factory=list)
+    follow_up_specs: list[RetrievalSpec] = Field(default_factory=list)
 
 
 class VerifiedClaim(BaseModel):
@@ -107,8 +160,13 @@ class VerificationResult(BaseModel):
 
 class EvidenceAssessment(BaseModel):
     evidence_id: str
-    question_role: str
+    question_role: str | None = None
+    claim_type: str | None = None
+    applicability: str | None = None
+    supports_question_dimensions: list[str] = Field(default_factory=list)
     semantic_relevance: int = Field(ge=0, le=100)
+    include_in_answer: bool = True
+    assessment_summary: str | None = None
 
 
 class EvidenceAssessmentResult(BaseModel):

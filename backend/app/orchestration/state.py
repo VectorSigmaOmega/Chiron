@@ -11,12 +11,14 @@ class GraphState(TypedDict, total=False):
     user_message_id: str
     user_question: str
     session_context: dict[str, Any]
-    parsed_query: dict[str, Any]
+    normalized_query: dict[str, Any]
+    evidence_plan: dict[str, Any]
     pending_tasks: list[dict[str, Any]]
     completed_tasks: list[dict[str, Any]]
     sources: list[dict[str, Any]]
     evidence_items: list[dict[str, Any]]
     unresolved_gaps: list[str]
+    coverage_decision: dict[str, Any]
     iteration: int
     step_trace: list[dict[str, Any]]
     emit_progress: Any

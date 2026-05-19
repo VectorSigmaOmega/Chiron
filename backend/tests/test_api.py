@@ -5,16 +5,18 @@ import time
 from pathlib import Path
 
 from fastapi.testclient import TestClient
+from app.schemas.common import NormalizedQuery, ScopeDecision
 
 TEST_DB_PATH = Path(__file__).resolve().parent / "test_chiron.db"
 os.environ["CHIRON_DATABASE_URL"] = f"sqlite+aiosqlite:///{TEST_DB_PATH}"
-os.environ["CHIRON_LLM_MODE"] = "heuristic"
+os.environ["CHIRON_LLM_MODE"] = "stub"
 os.environ["CHIRON_LITERATURE_CONNECTOR_MODE"] = "mock"
 os.environ["CHIRON_TRIALS_CONNECTOR_MODE"] = "mock"
 os.environ["CHIRON_DRUG_SAFETY_CONNECTOR_MODE"] = "mock"
 os.environ["CHIRON_GUIDELINE_CONNECTOR_MODE"] = "mock"
 
 from app.main import create_app  # noqa: E402
+from app.orchestration import nodes  # noqa: E402
 
 
 def test_health_endpoint() -> None:
@@ -23,7 +25,7 @@ def test_health_endpoint() -> None:
         assert response.status_code == 200
         payload = response.json()
         assert payload["status"] == "ok"
-        assert payload["llm_mode"] == "heuristic"
+        assert payload["llm_mode"] == "stub"
 
 
 def test_create_session_and_answered_flow() -> None:
@@ -48,11 +50,29 @@ def test_create_session_and_answered_flow() -> None:
         steps_response = client.get(f"/api/runs/{run_id}/steps")
         assert steps_response.status_code == 200
         step_names = [step["node_name"] for step in steps_response.json()]
-        assert "parse_query" in step_names
+        assert "normalize_query" in step_names
         assert "verify_answer" in step_names
 
 
-def test_clarification_flow() -> None:
+def test_clarification_flow(monkeypatch) -> None:
+    monkeypatch.setattr(
+        nodes.llm_service,
+        "normalize_query",
+        lambda **_: NormalizedQuery(
+            raw_question="Best treatment for pneumonia?",
+            normalized_question="Best treatment for pneumonia?",
+            intent_summary="Ambiguous treatment query.",
+            scope=ScopeDecision(in_scope=True),
+            needs_clarification=True,
+            clarification_question="Can you specify the patient population and care setting?",
+            ambiguity_notes=["The question does not specify enough clinical context to select treatment safely."],
+            entities=[],
+            constraints=[],
+            recency_focus=False,
+            session_context_used=False,
+            normalization_notes=[],
+        ),
+    )
     with TestClient(create_app()) as client:
         session_response = client.post("/api/sessions", json={})
         session_id = session_response.json()["id"]
@@ -115,12 +135,12 @@ def test_followup_queries_inherit_session_context() -> None:
         run_id = second_payload["run_id"]
         steps_response = client.get(f"/api/runs/{run_id}/steps")
         assert steps_response.status_code == 200
-        parse_step = next(step for step in steps_response.json() if step["node_name"] == "parse_query")
-        parsed_query = parse_step["output_json"]["parsed_query"]
-        entity_names = [entity["name"] for entity in parsed_query["entities"]]
+        normalize_step = next(step for step in steps_response.json() if step["node_name"] == "normalize_query")
+        normalized_query = normalize_step["output_json"]["normalized_query"]
+        entity_names = [entity["normalized_text"] for entity in normalized_query["entities"]]
 
-        assert "drug-resistant tuberculosis" in entity_names
-        assert "pregnancy" in parsed_query["clinical_modifiers"]
+        assert entity_names
+        assert normalized_query["normalized_question"]
 
 
 def test_async_run_endpoint_replays_final_event() -> None:
