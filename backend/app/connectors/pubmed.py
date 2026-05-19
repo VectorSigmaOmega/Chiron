@@ -6,6 +6,7 @@ from typing import Any
 from xml.etree import ElementTree
 
 import httpx
+from bs4 import BeautifulSoup
 
 from app.connectors.base import BaseConnector
 from app.core.config import Settings, get_settings
@@ -356,6 +357,86 @@ def _parse_pubmed_abstracts(xml_text: str) -> dict[str, dict[str, Any]]:
     return records
 
 
+def _parse_pmc_idconv(payload: dict[str, Any]) -> dict[str, str]:
+    records = payload.get("records", [])
+    mapping: dict[str, str] = {}
+    for record in records:
+        pmid = str(record.get("pmid") or "").strip()
+        pmcid = str(record.get("pmcid") or "").strip()
+        if pmid and pmcid:
+            mapping[pmid] = pmcid
+    return mapping
+
+
+def _extract_pmc_text(html_text: str, *, max_chars: int) -> str | None:
+    soup = BeautifulSoup(html_text, "html.parser")
+    for tag in soup(["script", "style", "noscript", "svg", "header", "footer", "nav"]):
+        tag.decompose()
+
+    article = soup.find("article") or soup.find("main") or soup.find(id="main-content") or soup.body
+    if article is None:
+        return None
+
+    sections: list[str] = []
+    for selector in [
+        ".tsec",
+        ".sec",
+        "#abstract",
+        ".abstract",
+        ".kwd-group",
+        "p",
+    ]:
+        for node in article.select(selector):
+            text = " ".join(node.get_text(" ", strip=True).split())
+            if len(text) >= 40:
+                sections.append(text)
+        if sections:
+            break
+
+    if not sections:
+        text = " ".join(article.get_text(" ", strip=True).split())
+        return text[:max_chars] if text else None
+
+    combined = "\n".join(dict.fromkeys(sections))
+    return combined[:max_chars] if combined else None
+
+
+def _select_relevant_excerpt(text: str | None, task: SpecialistTask, *, max_chars: int = 1800) -> str | None:
+    if not text:
+        return None
+    paragraphs = [
+        " ".join(paragraph.split())
+        for paragraph in re.split(r"\n{2,}|(?<=[.!?])\s{2,}", text)
+        if paragraph and paragraph.strip()
+    ]
+    if not paragraphs:
+        cleaned = " ".join(text.split())
+        return cleaned[:max_chars] if cleaned else None
+
+    query_tokens = set()
+    for value in [
+        *task.must_concepts,
+        *task.population_terms,
+        *task.intervention_terms,
+        *task.question_focus_terms,
+        task.query_text,
+    ]:
+        query_tokens.update(_significant_tokens(value))
+
+    ranked: list[tuple[int, str]] = []
+    for paragraph in paragraphs:
+        lowered = paragraph.lower()
+        score = sum(1 for token in query_tokens if token in lowered)
+        if score == 0 and len(paragraph) < 80:
+            continue
+        ranked.append((score, paragraph))
+    ranked.sort(key=lambda item: (item[0], len(item[1])), reverse=True)
+    selected = [paragraph for _, paragraph in ranked[:3]] or paragraphs[:2]
+    excerpt = " ".join(selected)
+    excerpt = " ".join(excerpt.split())
+    return excerpt[:max_chars] if excerpt else None
+
+
 class PubMedConnector(BaseConnector):
     connector_name = "pubmed"
 
@@ -421,6 +502,72 @@ class PubMedConnector(BaseConnector):
         response.raise_for_status()
         return _parse_pubmed_abstracts(response.text)
 
+    async def _pmc_id_map(self, ids: list[str]) -> dict[str, str]:
+        if not ids:
+            return {}
+        params = {
+            "ids": ",".join(ids),
+            "format": "json",
+            "tool": self.settings.pubmed_tool,
+        }
+        if self.settings.pubmed_email:
+            params["email"] = self.settings.pubmed_email
+        async with httpx.AsyncClient(
+            base_url=self.settings.pmc_base_url,
+            timeout=httpx.Timeout(20.0, connect=10.0),
+            transport=self.transport,
+            follow_redirects=True,
+        ) as client:
+            response = await client.get("/tools/idconv/api/v1/articles/", params=params)
+            response.raise_for_status()
+            return _parse_pmc_idconv(response.json())
+
+    async def _pmc_full_text(self, pmcid: str) -> str | None:
+        async with httpx.AsyncClient(
+            base_url=self.settings.pmc_base_url,
+            timeout=httpx.Timeout(20.0, connect=10.0),
+            transport=self.transport,
+            follow_redirects=True,
+        ) as client:
+            response = await client.get(f"/articles/{pmcid}/")
+            response.raise_for_status()
+            return _extract_pmc_text(response.text, max_chars=self.settings.pmc_full_text_max_chars)
+
+    async def _enrich_with_pmc(
+        self,
+        documents: list[SourceDocument],
+        *,
+        task: SpecialistTask,
+    ) -> list[SourceDocument]:
+        if not documents:
+            return documents
+        candidate_ids = [document.source_id for document in documents[: self.settings.pmc_enrichment_limit]]
+        id_map = await self._pmc_id_map(candidate_ids)
+        enriched: list[SourceDocument] = []
+        for document in documents:
+            pmcid = id_map.get(document.source_id)
+            if not pmcid:
+                enriched.append(document)
+                continue
+            try:
+                full_text = await self._pmc_full_text(pmcid)
+            except httpx.HTTPError:
+                enriched.append(document.model_copy(update={"metadata": {**document.metadata, "pmcid": pmcid}}))
+                continue
+            excerpt = _select_relevant_excerpt(full_text, task)
+            metadata = {
+                **document.metadata,
+                "pmcid": pmcid,
+                "pmc_url": f"{self.settings.pmc_base_url}/articles/{pmcid}/",
+            }
+            update_payload = {"full_text": full_text, "metadata": metadata}
+            if excerpt:
+                metadata["pmc_excerpt"] = excerpt
+                metadata["pubmed_abstract"] = document.abstract
+                update_payload["abstract"] = excerpt
+            enriched.append(document.model_copy(update=update_payload))
+        return enriched
+
     async def search(self, normalized_query: NormalizedQuery, task: SpecialistTask) -> list[SourceDocument]:
         timeout = httpx.Timeout(20.0, connect=10.0)
         async with httpx.AsyncClient(
@@ -484,4 +631,5 @@ class PubMedConnector(BaseConnector):
             return []
         score_floor = max(scored_documents[0][0][0] - 12, 10)
         filtered = [document for (score, _freshness), document in scored_documents if score >= score_floor]
-        return filtered[: self.settings.pubmed_retmax]
+        top_documents = filtered[: self.settings.pubmed_retmax]
+        return await self._enrich_with_pmc(top_documents, task=task)

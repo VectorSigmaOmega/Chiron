@@ -51,6 +51,9 @@ class Settings(BaseSettings):
     pubmed_email: str | None = None
     pubmed_retmax: int = 5
     pubmed_recency_years: int = 5
+    pmc_base_url: str = "https://pmc.ncbi.nlm.nih.gov"
+    pmc_enrichment_limit: int = 3
+    pmc_full_text_max_chars: int = 12000
     clinicaltrials_base_url: str = "https://clinicaltrials.gov/api/v2"
     clinicaltrials_page_size: int = 3
     dailymed_base_url: str = "https://dailymed.nlm.nih.gov/dailymed/services/v2"

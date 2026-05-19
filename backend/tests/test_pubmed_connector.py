@@ -89,6 +89,34 @@ def _mock_pubmed_transport(request: httpx.Request) -> httpx.Response:
             """.strip(),
             headers={"Content-Type": "application/xml"},
         )
+    if parsed.netloc == "pmc.ncbi.nlm.nih.gov" and parsed.path == "/tools/idconv/api/v1/articles/":
+        assert query["ids"] == ["40000002"]
+        return httpx.Response(
+            200,
+            json={
+                "records": [
+                    {"pmid": "40000002", "pmcid": "PMC40000002"},
+                ]
+            },
+        )
+    if parsed.netloc == "pmc.ncbi.nlm.nih.gov" and parsed.path == "/articles/PMC40000002/":
+        return httpx.Response(
+            200,
+            headers={"Content-Type": "text/html"},
+            text="""
+            <html><body>
+              <article>
+                <div class="tsec">
+                  <p>
+                    Multidrug-resistant tuberculosis treatment in pregnancy remains individualized,
+                    but recent full-text review evidence summarizes pregnancy-specific safety data
+                    for newer regimens.
+                  </p>
+                </div>
+              </article>
+            </body></html>
+            """,
+        )
     raise AssertionError(f"Unexpected URL: {request.url}")
 
 
@@ -97,6 +125,7 @@ async def test_pubmed_connector_returns_normalized_documents() -> None:
         settings=Settings(
             literature_connector_mode="pubmed",
             pubmed_base_url="https://eutils.ncbi.nlm.nih.gov/entrez/eutils",
+            pmc_base_url="https://pmc.ncbi.nlm.nih.gov",
         ),
         transport=httpx.MockTransport(_mock_pubmed_transport),
     )
@@ -124,6 +153,8 @@ async def test_pubmed_connector_returns_normalized_documents() -> None:
     assert documents[0].abstract is not None
     assert "pregnancy-specific safety data" in documents[0].abstract
     assert documents[0].publication_date is not None
+    assert documents[0].metadata["pmcid"] == "PMC40000002"
+    assert documents[0].full_text is not None
 
 
 async def test_pubmed_connector_uses_llm_generated_source_query() -> None:
