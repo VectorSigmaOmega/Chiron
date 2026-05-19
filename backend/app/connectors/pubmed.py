@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from datetime import UTC, date, datetime
 from typing import Any
 from xml.etree import ElementTree
@@ -9,6 +10,64 @@ import httpx
 from app.connectors.base import BaseConnector
 from app.core.config import Settings, get_settings
 from app.schemas.common import NormalizedQuery, SourceDocument, SpecialistTask
+
+GENERIC_RETRIEVAL_TOKENS = {
+    "a",
+    "an",
+    "and",
+    "are",
+    "as",
+    "at",
+    "be",
+    "by",
+    "current",
+    "for",
+    "from",
+    "in",
+    "into",
+    "is",
+    "it",
+    "recent",
+    "latest",
+    "evidence",
+    "evidence-based",
+    "update",
+    "updates",
+    "find",
+    "retrieve",
+    "retrieving",
+    "study",
+    "studies",
+    "article",
+    "articles",
+    "review",
+    "reviews",
+    "systematic",
+    "meta",
+    "meta-analysis",
+    "analysis",
+    "clinical",
+    "trial",
+    "trials",
+    "guideline",
+    "guidelines",
+    "recommendation",
+    "recommendations",
+    "protocol",
+    "protocols",
+    "new",
+    "of",
+    "on",
+    "or",
+    "the",
+    "to",
+    "used",
+    "using",
+    "with",
+    "without",
+    "within",
+    "years",
+}
 
 
 def _parse_pubmed_date(value: str | None) -> date | None:
@@ -70,6 +129,11 @@ def _date_filter(years: int) -> str:
     return f'("{start_year}/01/01"[Date - Publication] : "3000"[Date - Publication])'
 
 
+def _date_bounds(years: int) -> tuple[str, str]:
+    start_year = max(datetime.now(UTC).year - max(years - 1, 0), 1900)
+    return f"{start_year}/01/01", "3000"
+
+
 def _unique_terms(terms: list[str]) -> list[str]:
     seen: set[str] = set()
     ordered: list[str] = []
@@ -93,6 +157,89 @@ def _build_pubmed_term(task: SpecialistTask, *, years: int, recency_focus: bool)
     return " AND ".join(clauses) if clauses else ""
 
 
+def _tokenize(text: str) -> list[str]:
+    return re.findall(r"[a-z0-9][a-z0-9/-]*", text.lower())
+
+
+def _significant_tokens(text: str) -> list[str]:
+    tokens: list[str] = []
+    for token in _tokenize(text):
+        if len(token) < 3 or token in GENERIC_RETRIEVAL_TOKENS:
+            continue
+        tokens.append(token)
+    return tokens
+
+
+def _entity_terms(normalized_query: NormalizedQuery) -> tuple[list[str], set[str]]:
+    terms: list[str] = []
+    entity_tokens: set[str] = set()
+    seen_terms: set[str] = set()
+    for entity in normalized_query.entities:
+        normalized_text = _clean_term(entity.normalized_text)
+        term_value = normalized_text
+        if "population" in entity.category.lower() or "demographic" in (entity.role or "").lower():
+            token_candidates = _significant_tokens(normalized_text)
+            if len(token_candidates) > 1:
+                term_value = token_candidates[0]
+        if term_value and term_value.lower() not in seen_terms:
+            terms.append(term_value)
+            seen_terms.add(term_value.lower())
+        entity_tokens.update(_significant_tokens(normalized_text))
+    return terms, entity_tokens
+
+
+def _focus_terms(task: SpecialistTask, entity_tokens: set[str], *, allow_multiword: bool = False) -> tuple[list[str], set[str]]:
+    terms: list[str] = []
+    focus_tokens: set[str] = set()
+    seen_terms: set[str] = set()
+    for focus_term in task.focus_terms:
+        tokens = set(_significant_tokens(focus_term))
+        if not tokens or tokens.issubset(entity_tokens):
+            continue
+        if not allow_multiword and len(tokens) != 1:
+            continue
+        cleaned = _clean_term(focus_term)
+        if not cleaned or cleaned.lower() in seen_terms:
+            continue
+        terms.append(cleaned)
+        seen_terms.add(cleaned.lower())
+        focus_tokens.update(tokens)
+    return terms, focus_tokens
+
+
+def _purpose_terms(task: SpecialistTask, covered_tokens: set[str]) -> list[str]:
+    purpose_tokens: list[str] = []
+    seen: set[str] = set()
+    for text in (task.query_text,):
+        for token in _significant_tokens(text):
+            if token in covered_tokens or token in seen:
+                continue
+            seen.add(token)
+            purpose_tokens.append(token)
+    if not purpose_tokens:
+        for token in _significant_tokens(task.objective):
+            if token in covered_tokens or token in seen:
+                continue
+            seen.add(token)
+            purpose_tokens.append(token)
+            break
+    return purpose_tokens[:1]
+
+
+def _build_structured_pubmed_term(normalized_query: NormalizedQuery, task: SpecialistTask) -> str:
+    entity_terms, entity_tokens = _entity_terms(normalized_query)
+    focus_terms: list[str] = []
+    focus_tokens: set[str] = set()
+    focus_terms, focus_tokens = _focus_terms(task, entity_tokens, allow_multiword=not entity_terms)
+    purpose_terms = _purpose_terms(task, entity_tokens | focus_tokens)
+
+    clauses: list[str] = []
+    clauses.extend(entity_terms[:2])
+    clauses.extend(focus_terms[:1])
+    clauses.extend(purpose_terms)
+    return " ".join(clause for clause in clauses if clause)
+
+
 def _rank_document(
     raw_document: SourceDocument,
     *,
@@ -105,18 +252,54 @@ def _rank_document(
     )
     score += source_priority * 10
 
+    title_text = raw_document.title.lower()
+    abstract_text = (raw_document.abstract or "").lower()
+    mesh_text = " ".join(raw_document.metadata.get("mesh_terms", [])).lower()
     text = " ".join(
         [
-            raw_document.title,
-            raw_document.abstract or "",
+            title_text,
+            abstract_text,
             " ".join(raw_document.metadata.get("pubtypes", [])),
-            " ".join(raw_document.metadata.get("mesh_terms", [])),
+            mesh_text,
         ]
     ).lower()
 
     for term in task.focus_terms:
         if term.lower() in text:
             score += 7
+
+    disease_tokens: set[str] = set()
+    population_tokens: set[str] = set()
+    for entity in normalized_query.entities:
+        category = entity.category.lower()
+        role = (entity.role or "").lower()
+        tokens = set(_significant_tokens(entity.normalized_text))
+        if "disease" in category or "condition" in category:
+            disease_tokens.update(tokens)
+        elif "population" in category or "demographic" in role:
+            population_tokens.update(tokens)
+
+    if disease_tokens:
+        disease_title_or_mesh_hit = False
+        for token in disease_tokens:
+            if token in title_text:
+                score += 12
+                disease_title_or_mesh_hit = True
+            elif token in mesh_text:
+                score += 8
+                disease_title_or_mesh_hit = True
+            elif token in abstract_text:
+                score += 3
+        if not disease_title_or_mesh_hit:
+            score -= 12
+
+    for token in population_tokens:
+        if token in title_text:
+            score += 6
+        elif token in mesh_text:
+            score += 4
+        elif token in abstract_text:
+            score += 1
 
     publication_date = raw_document.publication_date or date(1900, 1, 1)
     freshness = publication_date.toordinal() / 10000
@@ -175,9 +358,18 @@ class PubMedConnector(BaseConnector):
             "term": _clean_term(term),
             "retmode": "json",
             "retmax": str(self.settings.pubmed_retmax),
-            "sort": "pub_date" if recency_required else "relevance",
+            "sort": "relevance",
             **self._common_params(),
         }
+        if recency_required:
+            mindate, maxdate = _date_bounds(self.settings.pubmed_recency_years)
+            params.update(
+                {
+                    "datetype": "pdat",
+                    "mindate": mindate,
+                    "maxdate": maxdate,
+                }
+            )
         response = await client.get("/esearch.fcgi", params=params)
         response.raise_for_status()
         payload = response.json()
@@ -214,7 +406,7 @@ class PubMedConnector(BaseConnector):
         ) as client:
             search_terms = _unique_terms(
                 [
-                    _build_pubmed_term(task, years=self.settings.pubmed_recency_years, recency_focus=normalized_query.recency_focus),
+                    _build_structured_pubmed_term(normalized_query, task),
                     task.query_text,
                     normalized_query.normalized_question,
                     normalized_query.raw_question,
