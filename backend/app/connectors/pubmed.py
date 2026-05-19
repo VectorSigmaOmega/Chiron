@@ -147,14 +147,19 @@ def _unique_terms(terms: list[str]) -> list[str]:
     return ordered
 
 
-def _build_pubmed_term(task: SpecialistTask, *, years: int, recency_focus: bool) -> str:
-    clauses: list[str] = []
-    source_query = _clean_term(task.source_query or task.query_text)
-    if source_query:
-        clauses.append(source_query)
-    if recency_focus:
-        clauses.append(_date_filter(years))
-    return " AND ".join(clauses) if clauses else ""
+def _dedupe_preserve(items: list[str]) -> list[str]:
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for item in items:
+        cleaned = _clean_term(item)
+        if not cleaned:
+            continue
+        key = cleaned.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        ordered.append(cleaned)
+    return ordered
 
 
 def _tokenize(text: str) -> list[str]:
@@ -170,7 +175,14 @@ def _significant_tokens(text: str) -> list[str]:
     return tokens
 
 
-def _entity_terms(normalized_query: NormalizedQuery) -> tuple[list[str], set[str]]:
+def _entity_terms(normalized_query: NormalizedQuery, task: SpecialistTask) -> tuple[list[str], set[str]]:
+    if task.must_concepts or task.population_terms or task.intervention_terms:
+        terms = _dedupe_preserve(task.must_concepts[:2] + task.population_terms[:2] + task.intervention_terms[:2])
+        task_tokens = set()
+        for text in task.must_concepts + task.population_terms + task.intervention_terms:
+            task_tokens.update(_significant_tokens(text))
+        return terms, task_tokens
+
     terms: list[str] = []
     entity_tokens: set[str] = set()
     seen_terms: set[str] = set()
@@ -227,10 +239,15 @@ def _purpose_terms(task: SpecialistTask, covered_tokens: set[str]) -> list[str]:
 
 
 def _build_structured_pubmed_term(normalized_query: NormalizedQuery, task: SpecialistTask) -> str:
-    entity_terms, entity_tokens = _entity_terms(normalized_query)
+    entity_terms, entity_tokens = _entity_terms(normalized_query, task)
     focus_terms: list[str] = []
     focus_tokens: set[str] = set()
-    focus_terms, focus_tokens = _focus_terms(task, entity_tokens, allow_multiword=not entity_terms)
+    if task.question_focus_terms:
+        focus_terms = _dedupe_preserve(task.question_focus_terms[:1])
+        for term in focus_terms:
+            focus_tokens.update(_significant_tokens(term))
+    else:
+        focus_terms, focus_tokens = _focus_terms(task, entity_tokens, allow_multiword=not entity_terms)
     purpose_terms = _purpose_terms(task, entity_tokens | focus_tokens)
 
     clauses: list[str] = []
@@ -264,20 +281,27 @@ def _rank_document(
         ]
     ).lower()
 
-    for term in task.focus_terms:
+    ranking_terms = task.focus_terms or task.must_concepts or task.population_terms or task.intervention_terms
+    for term in ranking_terms:
         if term.lower() in text:
             score += 7
 
     disease_tokens: set[str] = set()
     population_tokens: set[str] = set()
-    for entity in normalized_query.entities:
-        category = entity.category.lower()
-        role = (entity.role or "").lower()
-        tokens = set(_significant_tokens(entity.normalized_text))
-        if "disease" in category or "condition" in category:
-            disease_tokens.update(tokens)
-        elif "population" in category or "demographic" in role:
-            population_tokens.update(tokens)
+    if task.must_concepts or task.population_terms:
+        for text_value in task.must_concepts:
+            disease_tokens.update(_significant_tokens(text_value))
+        for text_value in task.population_terms:
+            population_tokens.update(_significant_tokens(text_value))
+    else:
+        for entity in normalized_query.entities:
+            category = entity.category.lower()
+            role = (entity.role or "").lower()
+            tokens = set(_significant_tokens(entity.normalized_text))
+            if "disease" in category or "condition" in category:
+                disease_tokens.update(tokens)
+            elif "population" in category or "demographic" in role:
+                population_tokens.update(tokens)
 
     if disease_tokens:
         disease_title_or_mesh_hit = False

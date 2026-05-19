@@ -23,8 +23,22 @@ class GuidelineFixtureConnector(BaseConnector):
         return list(payload.get("guidelines", []))
 
     async def search(self, normalized_query: NormalizedQuery, task: SpecialistTask) -> list[SourceDocument]:
+        structured_terms = [
+            *task.must_concepts,
+            *task.population_terms,
+            *task.intervention_terms,
+            *task.question_focus_terms,
+            *task.supporting_concepts,
+        ]
         haystack = " ".join(
-            [normalized_query.raw_question, normalized_query.normalized_question, task.query_text, task.source_query, *task.focus_terms]
+            [
+                normalized_query.raw_question,
+                normalized_query.normalized_question,
+                task.query_text,
+                task.source_query or "",
+                *task.focus_terms,
+                *structured_terms,
+            ]
         ).lower()
         ranked_documents: list[tuple[int, SourceDocument]] = []
         for record in self._records:

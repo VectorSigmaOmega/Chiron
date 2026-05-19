@@ -44,6 +44,10 @@ def _parse_dailymed_date(value: str | None) -> date | None:
 
 
 def _extract_drug_name(normalized_query: NormalizedQuery, task: SpecialistTask) -> str | None:
+    for term in task.intervention_terms:
+        cleaned = term.strip()
+        if cleaned:
+            return cleaned
     for term in task.focus_terms:
         cleaned = term.strip()
         if cleaned:

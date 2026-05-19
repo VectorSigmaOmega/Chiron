@@ -117,6 +117,18 @@ class LLMService:
     def _stub_plan_evidence(self, *, normalized_query: NormalizedQuery, session_context: dict) -> EvidencePlan:
         text = normalized_query.normalized_question
         lowered = text.lower()
+        entity_terms = [entity.normalized_text for entity in normalized_query.entities[:4]]
+        population_terms = [
+            entity.normalized_text
+            for entity in normalized_query.entities
+            if "population" in entity.category.lower() or "demographic" in (entity.role or "").lower()
+        ][:3]
+        must_concepts = [
+            entity.normalized_text
+            for entity in normalized_query.entities
+            if any(token in entity.category.lower() for token in ["disease", "condition", "topic"])
+        ][:3]
+        focus_defaults = ["treatment"] if any(token in lowered for token in ["treatment", "management", "guideline", "first-line", "first line"]) else []
         specs = [
             RetrievalSpec(
                 spec_id=str(uuid4()),
@@ -124,8 +136,12 @@ class LLMService:
                 objective="Retrieve supporting medical literature.",
                 rationale="Literature search is the default retrieval lane in local stub mode.",
                 query_text=text,
-                source_query=text,
-                focus_terms=[entity.normalized_text for entity in normalized_query.entities[:4]],
+                source_query=None,
+                focus_terms=entity_terms,
+                must_concepts=must_concepts or entity_terms[:2],
+                population_terms=population_terms,
+                question_focus_terms=focus_defaults or ["clinical evidence"],
+                recency_years=self.settings.pubmed_recency_years if normalized_query.recency_focus else None,
                 desired_result_count=5,
                 priority="high",
             )
@@ -139,8 +155,13 @@ class LLMService:
                     objective="Retrieve guideline or standard-of-care evidence.",
                     rationale="Treatment-style questions should check guidance in local stub mode.",
                     query_text=text,
-                    source_query=text,
-                    focus_terms=[entity.normalized_text for entity in normalized_query.entities[:4]],
+                    source_query=None,
+                    focus_terms=entity_terms,
+                    must_concepts=must_concepts or entity_terms[:2],
+                    population_terms=population_terms,
+                    question_focus_terms=["treatment guidance", "standard of care"],
+                    preferred_evidence_types=["guideline"],
+                    recency_years=self.settings.pubmed_recency_years if normalized_query.recency_focus else None,
                     desired_result_count=2,
                     priority="high",
                 ),
@@ -153,8 +174,13 @@ class LLMService:
                     objective="Retrieve emerging or ongoing trial evidence.",
                     rationale="Recency-sensitive questions may benefit from trial registry evidence in local stub mode.",
                     query_text=text,
-                    source_query=text,
-                    focus_terms=[entity.normalized_text for entity in normalized_query.entities[:4]],
+                    source_query=None,
+                    focus_terms=entity_terms,
+                    must_concepts=must_concepts or entity_terms[:2],
+                    population_terms=population_terms,
+                    question_focus_terms=["emerging evidence", "trials"],
+                    preferred_evidence_types=["registry", "clinical trial"],
+                    recency_years=self.settings.pubmed_recency_years if normalized_query.recency_focus else None,
                     desired_result_count=3,
                     priority="medium",
                 )
@@ -167,8 +193,17 @@ class LLMService:
                     objective="Retrieve drug-label or safety evidence.",
                     rationale="Safety language is present in the question in local stub mode.",
                     query_text=text,
-                    source_query=text,
-                    focus_terms=[entity.normalized_text for entity in normalized_query.entities[:4]],
+                    source_query=None,
+                    focus_terms=entity_terms,
+                    must_concepts=must_concepts or entity_terms[:2],
+                    population_terms=population_terms,
+                    question_focus_terms=["safety", "warnings", "adverse effects"],
+                    intervention_terms=[
+                        entity.normalized_text
+                        for entity in normalized_query.entities
+                        if entity.category.lower() in {"drug", "medication", "therapy", "intervention"}
+                    ][:3],
+                    preferred_evidence_types=["label", "drug safety"],
                     desired_result_count=3,
                     priority="medium",
                 )
@@ -326,14 +361,22 @@ Your job:
 - break the question into subquestions only where it helps answer quality
 - choose only the retrieval lanes that materially help
 - generate retrieval_specs for each chosen lane
-- use source_query to produce the connector-facing query string for that lane
-- use query_text to describe the same retrieval goal in plain language
+- use query_text to describe the retrieval goal in plain language for logging and debugging
+- fill the structured retrieval fields so connectors can compile source-native queries
 
 Planning rules:
 - treatment questions should usually prioritize guideline and literature lanes before trial details
 - trial evidence should supplement rather than dominate unless the user explicitly asks about investigational or ongoing work
 - drug_safety should be used only when the question asks about risks, warnings, adverse effects, contraindications, interactions, or a specific medication
-- focus_terms should contain the most important entity and constraint phrases from the normalized query
+- must_concepts should contain the core disease, condition, or topic concepts that must be present
+- population_terms should contain patient-group or context terms like pregnancy, pediatrics, HIV, or postpartum when relevant
+- intervention_terms should contain named drugs, regimens, procedures, or exposures when relevant
+- question_focus_terms should contain the semantic focus of the question such as treatment, diagnosis, prevention, safety, prognosis, or screening
+- supporting_concepts may add narrower concepts that improve relevance but are not mandatory
+- exclude_concepts may be used sparingly to prevent obvious drift
+- preferred_evidence_types should express source preferences like guideline, review, clinical trial, registry, label, or observational study when useful
+- source_query is optional legacy/debug text; do not rely on raw boolean syntax as the main contract
+- focus_terms may be a compact summary of the most salient phrases, but the structured fields are primary
 - retrieval specs must stay faithful to the normalized question and should not introduce new clinical assumptions
 - do not use hardcoded disease or modifier lists
 

@@ -100,10 +100,19 @@ class ClinicalTrialsConnector(BaseConnector):
         self.transport = transport
 
     async def search(self, normalized_query: NormalizedQuery, task: SpecialistTask) -> list[SourceDocument]:
+        semantic_terms = [
+            *task.must_concepts[:2],
+            *task.population_terms[:2],
+            *task.intervention_terms[:2],
+            *task.question_focus_terms[:1],
+        ]
         timeout = httpx.Timeout(20.0, connect=10.0)
         params = {
             "pageSize": str(min(task.desired_result_count, self.settings.clinicaltrials_page_size)),
-            "query.term": task.source_query or task.query_text or normalized_query.normalized_question,
+            "query.term": " ".join(term for term in semantic_terms if term)
+            or task.source_query
+            or task.query_text
+            or normalized_query.normalized_question,
         }
         async with httpx.AsyncClient(
             base_url=self.settings.clinicaltrials_base_url,

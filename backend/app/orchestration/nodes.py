@@ -75,6 +75,14 @@ def _retrieval_specs_to_tasks(retrieval_specs: list[RetrievalSpec]) -> list[Spec
                 source_query=spec.source_query,
                 rationale=spec.rationale,
                 focus_terms=spec.focus_terms,
+                must_concepts=spec.must_concepts,
+                supporting_concepts=spec.supporting_concepts,
+                population_terms=spec.population_terms,
+                intervention_terms=spec.intervention_terms,
+                question_focus_terms=spec.question_focus_terms,
+                exclude_concepts=spec.exclude_concepts,
+                preferred_evidence_types=spec.preferred_evidence_types,
+                recency_years=spec.recency_years,
                 priority=spec.priority,
                 desired_result_count=spec.desired_result_count,
                 depends_on=spec.depends_on,
@@ -84,7 +92,15 @@ def _retrieval_specs_to_tasks(retrieval_specs: list[RetrievalSpec]) -> list[Spec
 
 
 def _existing_task_signature(task: SpecialistTask) -> tuple[str, str]:
-    return task.agent_type, task.source_query.strip().lower()
+    signature_parts = [
+        task.query_text.strip().lower(),
+        "|".join(term.lower() for term in task.must_concepts),
+        "|".join(term.lower() for term in task.population_terms),
+        "|".join(term.lower() for term in task.intervention_terms),
+        "|".join(term.lower() for term in task.question_focus_terms),
+        (task.source_query or "").strip().lower(),
+    ]
+    return task.agent_type, "||".join(part for part in signature_parts if part)
 
 
 def load_session_context(state: dict) -> dict:
@@ -284,6 +300,14 @@ def assess_coverage(state: dict) -> dict:
             source_query=spec.source_query,
             rationale=spec.rationale,
             focus_terms=spec.focus_terms,
+            must_concepts=spec.must_concepts,
+            supporting_concepts=spec.supporting_concepts,
+            population_terms=spec.population_terms,
+            intervention_terms=spec.intervention_terms,
+            question_focus_terms=spec.question_focus_terms,
+            exclude_concepts=spec.exclude_concepts,
+            preferred_evidence_types=spec.preferred_evidence_types,
+            recency_years=spec.recency_years,
             priority=spec.priority,
             desired_result_count=spec.desired_result_count,
             depends_on=spec.depends_on,

@@ -69,8 +69,16 @@ class RetrievalSpec(BaseModel):
     objective: str
     rationale: str
     query_text: str
-    source_query: str
+    source_query: str | None = None
     focus_terms: list[str] = Field(default_factory=list)
+    must_concepts: list[str] = Field(default_factory=list)
+    supporting_concepts: list[str] = Field(default_factory=list)
+    population_terms: list[str] = Field(default_factory=list)
+    intervention_terms: list[str] = Field(default_factory=list)
+    question_focus_terms: list[str] = Field(default_factory=list)
+    exclude_concepts: list[str] = Field(default_factory=list)
+    preferred_evidence_types: list[str] = Field(default_factory=list)
+    recency_years: int | None = None
     desired_result_count: int = 5
     priority: str = "medium"
     depends_on: list[str] = Field(default_factory=list)
@@ -128,9 +136,17 @@ class SpecialistTask(BaseModel):
     agent_type: str
     objective: str
     query_text: str
-    source_query: str
+    source_query: str | None = None
     rationale: str | None = None
     focus_terms: list[str] = Field(default_factory=list)
+    must_concepts: list[str] = Field(default_factory=list)
+    supporting_concepts: list[str] = Field(default_factory=list)
+    population_terms: list[str] = Field(default_factory=list)
+    intervention_terms: list[str] = Field(default_factory=list)
+    question_focus_terms: list[str] = Field(default_factory=list)
+    exclude_concepts: list[str] = Field(default_factory=list)
+    preferred_evidence_types: list[str] = Field(default_factory=list)
+    recency_years: int | None = None
     priority: str = "medium"
     desired_result_count: int = 5
     depends_on: list[str] = Field(default_factory=list)
