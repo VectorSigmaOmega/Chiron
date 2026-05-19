@@ -121,9 +121,9 @@ Guideline     Literature      Drug Safety
 Agent         Agent           Agent
     |             |               |
     v             v               v
-Guideline      PubMed /        DailyMed /
-Sources        Europe PMC /    Drugs@FDA / openFDA
-               PMC
+ECRI Search    PubMed / PMC    DailyMed /
+-> original    literature      Drugs@FDA / openFDA
+document
     |
     |-----------------------------|
                   |
@@ -246,12 +246,12 @@ Allowed capabilities:
 
 Role:
 
-- retrieve and summarize guideline-backed recommendations
+- discover accessible guideline-backed recommendations and summarize them
 
 Allowed connectors:
 
-- one explicitly allowlisted guideline source in the first pass
-- curated guideline fixtures for demo/evaluation if scraping or parsing is not yet stable
+- one explicitly allowlisted guideline-discovery source in the first pass
+- curated guideline fixtures only as dev/evaluation fallback if live retrieval is not yet stable
 - broader guideline coverage added later
 
 ### 8.3 Literature Agent

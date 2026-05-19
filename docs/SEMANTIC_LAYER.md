@@ -124,8 +124,16 @@ class RetrievalSpec(BaseModel):
     objective: str
     rationale: str
     query_text: str
-    source_query: str
+    source_query: str | None
     focus_terms: list[str]
+    must_concepts: list[str]
+    supporting_concepts: list[str]
+    population_terms: list[str]
+    intervention_terms: list[str]
+    question_focus_terms: list[str]
+    exclude_concepts: list[str]
+    preferred_evidence_types: list[str]
+    recency_years: int | None
     desired_result_count: int
     priority: str
     depends_on: list[str]
@@ -139,6 +147,13 @@ The allowed retrieval lanes are operational, not medical:
 - `drug_safety`
 
 The planner may choose any combination of these lanes.
+
+Current connector interpretation:
+
+- `guideline` means guideline discovery plus accessible original-document extraction
+- `literature` means PubMed discovery and literature retrieval
+- `trials` means trial-registry retrieval
+- `drug_safety` means label or safety-source retrieval
 
 ## Coverage Assessment
 
@@ -212,6 +227,6 @@ This refactor does not make all connectors semantically perfect. It does:
 
 It does not yet:
 
-- add real live guideline ingestion beyond the current placeholder connector
+- guarantee that every discovered guideline source is fetchable
 - eliminate all source-format-specific parsing logic
 - solve answer quality fully without further retrieval and synthesis tuning

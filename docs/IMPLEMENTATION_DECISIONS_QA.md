@@ -359,7 +359,7 @@ The initial real MVP source set should include:
 - PubMed
 - ClinicalTrials.gov
 - DailyMed if it proves low-friction during implementation
-- one narrow guideline source or curated guideline fixture support
+- ECRI guideline discovery plus accessible original-document retrieval
 
 Later source expansion can add:
 
@@ -373,13 +373,14 @@ This gives the MVP a believable real-source core without blocking the deployable
 ### Q36. Which guideline sources should be allowlisted first?
 
 **Recommended Answer**  
-Do not promise broad guideline scraping in the first pass. Start with one of:
+Do not promise broad guideline scraping in the first pass. Start with:
 
-- CDC
-- or one curated guideline fixture path if live parsing is not stable yet
+- ECRI as a guideline-discovery/index source
+- then follow the original guideline link only when the source document is accessible
+- keep fixture guidance as a local fallback only, not primary live evidence
 
 **Why**  
-This is much more buildable in assignment time than promising a multi-source guideline layer upfront.
+This is much more buildable than promising a multi-source scraping layer upfront, while still preserving provenance back to the original publisher when accessible.
 
 ### Q37. Should unrestricted web search be part of the MVP?
 

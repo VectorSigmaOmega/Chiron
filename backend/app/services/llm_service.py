@@ -152,8 +152,8 @@ class LLMService:
                 RetrievalSpec(
                     spec_id=str(uuid4()),
                     lane="guideline",
-                    objective="Retrieve guideline or standard-of-care evidence.",
-                    rationale="Treatment-style questions should check guidance in local stub mode.",
+                    objective="Discover accessible guideline or standard-of-care evidence.",
+                    rationale="Treatment-style questions should check guideline discovery plus accessible recommendation sources in local stub mode.",
                     query_text=text,
                     source_query=None,
                     focus_terms=entity_terms,
@@ -243,7 +243,12 @@ class LLMService:
             elif evidence.source_type == "registry":
                 relevance += 5
                 role = "emerging evidence"
+            elif evidence.source_type == "guideline_candidate":
+                relevance += 2
+                role = "guideline discovery metadata"
             include = True
+            if evidence.source_type == "guideline_candidate":
+                include = False
             if "public health achievements" in lowered:
                 include = False
                 relevance = 10
@@ -365,6 +370,7 @@ Your job:
 - fill the structured retrieval fields so connectors can compile source-native queries
 
 Planning rules:
+- guideline lane means discover potentially authoritative guidelines and fetch accessible original recommendation documents when possible
 - treatment questions should usually prioritize guideline and literature lanes before trial details
 - trial evidence should supplement rather than dominate unless the user explicitly asks about investigational or ongoing work
 - drug_safety should be used only when the question asks about risks, warnings, adverse effects, contraindications, interactions, or a specific medication
@@ -379,6 +385,7 @@ Planning rules:
 - focus_terms may be a compact summary of the most salient phrases, but the structured fields are primary
 - retrieval specs must stay faithful to the normalized question and should not introduce new clinical assumptions
 - do not use hardcoded disease or modifier lists
+- if guideline retrieval is likely useful, prefer broader discovery concepts over overly specific boolean syntax
 
 Session context:
 {session_context}
@@ -422,6 +429,7 @@ Important rules:
 - prefer direct evidence that answers the user question over broad background context
 - treatment questions should privilege evidence that states what should be done clinically
 - trial registry entries can be useful but should usually be treated as emerging evidence rather than standard-of-care evidence unless the user explicitly asks for trials
+- guideline_candidate or inaccessible-guideline items represent discovery metadata and usually should not drive the main answer
 - do not omit any evidence_id
 
 Normalized query:
@@ -471,6 +479,7 @@ Important rules:
 - treatment questions should not drift into speculative trial details unless those details are genuinely useful
 - do not use hardcoded disease or modifier lists
 - respect the current iteration and keep the follow-up set focused
+- if guideline discovery found only inaccessible candidates, further literature retrieval may still be enough to answer with an explicit limitation
 
 Normalized query:
 {normalized_query.model_dump(mode="json")}
@@ -521,6 +530,7 @@ Requirements:
 - do not introduce medical assumptions that are not present in the evidence
 - separate the direct answer from caveats and uncertainty
 - if emerging trial evidence is included, present it as supplementary context rather than the main answer unless the user explicitly asked for trials
+- if a guideline candidate was discovered but the original document was inaccessible, treat that as a limitation rather than direct recommendation evidence
 - evidence_strength must be one of: high, moderate, low, unknown
 
 Normalized query:

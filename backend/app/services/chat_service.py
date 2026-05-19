@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.agents.specialists import RetrievalSpecialist
 from app.connectors.clinicaltrials import ClinicalTrialsConnector
 from app.connectors.dailymed import DailyMedConnector
-from app.connectors.guidelines import GuidelineFixtureConnector
+from app.connectors.guidelines import ECRIGuidelineConnector, GuidelineFixtureConnector
 from app.connectors.pubmed import PubMedConnector
 from app.core.config import get_settings
 from app.connectors.mock import (
@@ -45,7 +45,9 @@ def build_specialists() -> dict[str, RetrievalSpecialist]:
         else MockDrugSafetyConnector()
     )
     guideline_connector = (
-        GuidelineFixtureConnector(settings=settings)
+        ECRIGuidelineConnector(settings=settings)
+        if settings.guideline_connector_mode == "ecri"
+        else GuidelineFixtureConnector(settings=settings)
         if settings.guideline_connector_mode == "fixture"
         else MockGuidelineConnector()
     )

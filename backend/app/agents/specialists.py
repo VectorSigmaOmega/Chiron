@@ -7,12 +7,14 @@ from app.schemas.common import EvidenceItem, NormalizedQuery, SourceDocument, Sp
 
 
 def _source_priority(source_type: str) -> int:
-    return {"guideline": 4, "review": 3, "label": 3, "study": 2, "registry": 1}.get(source_type, 1)
+    return {"guideline": 4, "review": 3, "label": 3, "study": 2, "registry": 1, "guideline_candidate": 1}.get(source_type, 1)
 
 
 def _evidence_strength(document: SourceDocument) -> str:
     if document.source_type == "guideline":
         return "high"
+    if document.source_type == "guideline_candidate":
+        return "low"
     if document.source_type in {"review", "label"}:
         return "moderate"
     return "low"
@@ -21,6 +23,11 @@ def _evidence_strength(document: SourceDocument) -> str:
 def _uncertainty_notes(document: SourceDocument) -> list[str]:
     notes: list[str] = []
     abstract = (document.abstract or "").lower()
+    access_status = document.metadata.get("access_status")
+    if document.source_type == "guideline_candidate":
+        notes.append("This item captures guideline discovery metadata rather than accessible recommendation text.")
+    if access_status and access_status != "accessible":
+        notes.append(f"The original source document was not fully accessible at retrieval time ({access_status}).")
     if document.source_type == "registry":
         notes.append("Registry records can indicate emerging evidence but do not establish comparative clinical effectiveness.")
     if document.source_type == "study":
@@ -33,6 +40,11 @@ def _uncertainty_notes(document: SourceDocument) -> list[str]:
 def _limitations(document: SourceDocument) -> list[str]:
     limitations: list[str] = []
     abstract = (document.abstract or "").lower()
+    access_status = document.metadata.get("access_status")
+    if document.source_type == "guideline_candidate":
+        limitations.append("The original guideline document could not be accessed, so only discovery metadata is available.")
+    if access_status and access_status != "accessible":
+        limitations.append(f"The source document was not directly accessible during retrieval ({access_status}).")
     if document.source_type == "registry":
         limitations.append("Trial registry entries do not provide full peer-reviewed outcome evidence.")
     if document.source_type == "label":
@@ -47,7 +59,7 @@ def _limitations(document: SourceDocument) -> list[str]:
 
 
 def _key_claim(document: SourceDocument) -> str:
-    text = (document.abstract or document.title).strip()
+    text = (document.abstract or document.full_text or document.title).strip()
     if not text:
         return document.title
     sentences = [segment.strip() for segment in re.split(r"(?<=[.!?])\s+", text) if segment.strip()]

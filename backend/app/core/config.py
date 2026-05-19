@@ -43,7 +43,7 @@ class Settings(BaseSettings):
     )
     guideline_connector_mode: str = Field(
         default="mock",
-        description="mock or fixture. Fixture mode uses a curated local guideline dataset for the MVP.",
+        description="mock, fixture, or ecri. ECRI mode uses ECRI guideline discovery plus accessible original-document extraction.",
     )
     pubmed_base_url: str = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
     pubmed_api_key: str | None = None
@@ -58,6 +58,10 @@ class Settings(BaseSettings):
     guideline_fixture_path: str = str(
         Path(__file__).resolve().parents[1] / "connectors" / "fixtures" / "guidelines.json"
     )
+    ecri_base_url: str = "https://guidelines.ecri.org"
+    ecri_page_size: int = 5
+    guideline_document_max_chars: int = 12000
+    guideline_document_max_pages: int = 12
     max_iterations: int = 3
     max_specialist_tasks: int = 8
     max_schema_retries: int = 2
